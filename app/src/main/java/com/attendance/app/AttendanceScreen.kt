@@ -1,5 +1,6 @@
 package com.attendance.app
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,7 +21,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
@@ -79,16 +79,24 @@ fun AttendanceScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Calendar Table
+            // 1. Calendar Table
             CalendarView(
                 currentMonth = currentMonth,
                 attendanceMap = attendanceMap,
                 onDayClick = { selectedDayForEdit = it }
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Salary Breakdown Card
+            // 2. Summary Box: Absent, H-Days, Total Leaves & Dabba Absents
+            AttendanceSummaryCard(
+                currentMonth = currentMonth,
+                attendanceMap = attendanceMap
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 3. Salary Breakdown Card
             SalaryReportCard(report = report)
         }
     }
@@ -133,7 +141,6 @@ fun CalendarView(
             .border(1.dp, Color.Gray, RoundedCornerShape(8.dp))
             .padding(8.dp)
     ) {
-        // Week Header
         Row(modifier = Modifier.fillMaxWidth()) {
             days.forEach { d ->
                 Text(
@@ -146,13 +153,11 @@ fun CalendarView(
         }
         Spacer(modifier = Modifier.height(6.dp))
 
-        // Days Grid
         LazyVerticalGrid(
             columns = GridCells.Fixed(7),
             modifier = Modifier.height(300.dp),
             userScrollEnabled = false
         ) {
-            // Alignment for 1st day of month
             val firstDayOffset = currentMonth.atDay(1).dayOfWeek.value - 1
             items(firstDayOffset) {
                 Box(modifier = Modifier.size(45.dp))
@@ -166,6 +171,127 @@ fun CalendarView(
                 DayCell(day = record, onClick = { onDayClick(record) })
             }
         }
+    }
+}
+
+@Composable
+fun AttendanceSummaryCard(
+    currentMonth: YearMonth,
+    attendanceMap: Map<String, DayAttendance>
+) {
+    val daysInMonth = currentMonth.lengthOfMonth()
+    val records = (1..daysInMonth).map { day ->
+        val dateStr = currentMonth.atDay(day).toString()
+        attendanceMap[dateStr] ?: DayAttendance(dateStr, day)
+    }
+
+    val absentDays = records.filter { it.workStatus == AttendanceStatus.ABSENT }
+    val halfDays = records.filter { it.workStatus == AttendanceStatus.HALF_DAY }
+    val dabbaAbsentDays = records.filter { it.dabbaStatus == DabbaStatus.ABSENT }
+
+    val totalLeaves = absentDays.size + (halfDays.size * 0.5)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, Color(0xFFDCDCDC))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Attendance & Leaves Summary",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // Work Attendance Section
+            Text(
+                text = "Work Attendance",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = Color(0xFF333333)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+
+            SummaryItemRow(
+                label = "Absent Days (${absentDays.size}):",
+                dateList = if (absentDays.isEmpty()) "None" else absentDays.joinToString(", ") { "${it.dayOfMonth}" },
+                textColor = if (absentDays.isNotEmpty()) Color(0xFFD32F2F) else Color.DarkGray
+            )
+
+            SummaryItemRow(
+                label = "Half-Days / H (${halfDays.size}):",
+                dateList = if (halfDays.isEmpty()) "None" else halfDays.joinToString(", ") { "${it.dayOfMonth}" },
+                textColor = if (halfDays.isNotEmpty()) Color(0xFFE65100) else Color.DarkGray
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(text = "Total Leaves Taken:", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(
+                    text = "%.1f Days".format(totalLeaves),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = if (totalLeaves > 4.0) Color(0xFFD32F2F) else Color(0xFF2E7D32)
+                )
+            }
+
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // Dabba Section
+            Text(
+                text = "Dabba Attendance",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = Color(0xFF333333)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+
+            SummaryItemRow(
+                label = "Dabba Absent Dates:",
+                dateList = if (dabbaAbsentDays.isEmpty()) "None" else dabbaAbsentDays.joinToString(", ") { "${it.dayOfMonth}" },
+                textColor = if (dabbaAbsentDays.isNotEmpty()) Color(0xFFD32F2F) else Color.DarkGray
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(text = "Total Dabba Absent:", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(
+                    text = "${dabbaAbsentDays.size} Days",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = if (dabbaAbsentDays.isNotEmpty()) Color(0xFFD32F2F) else Color(0xFF2E7D32)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SummaryItemRow(
+    label: String,
+    dateList: String,
+    textColor: Color
+) {
+    Column(modifier = Modifier.padding(vertical = 2.dp)) {
+        Text(text = label, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Text(
+            text = "Dates: $dateList",
+            fontSize = 12.sp,
+            color = textColor,
+            fontWeight = FontWeight.Normal,
+            modifier = Modifier.padding(start = 4.dp, top = 1.dp)
+        )
     }
 }
 
@@ -219,7 +345,7 @@ fun SalaryReportCard(report: SalaryReport) {
 
             SalaryRow("Net Monthly Salary", "₹%.2f".format(report.netMonthlySalary))
             SalaryRow("Per Day Salary (${report.totalMonthDays} Days)", "₹%.2f".format(report.perDaySalary))
-            SalaryRow("Leaves Taken (Free: 4)", "%.1f Days".format(report.leaveDaysTaken))
+            SalaryRow("Leave Days (Free: 4)", "%.1f Days".format(report.leaveDaysTaken))
 
             if (report.leaveBonus > 0) {
                 SalaryRow("Leaves Bonus (+)", "₹%.2f".format(report.leaveBonus), Color(0xFF2E7D32))
@@ -249,7 +375,6 @@ fun SalaryReportCard(report: SalaryReport) {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Prominent Grand Box
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
