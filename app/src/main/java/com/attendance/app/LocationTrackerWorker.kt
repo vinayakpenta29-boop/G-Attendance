@@ -6,6 +6,8 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.tasks.Tasks
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import java.time.LocalDate
 import java.time.LocalTime
 
@@ -14,12 +16,15 @@ class LocationTrackerWorker(
     workerParams: WorkerParameters
 ) : CoroutineWorker(appContext, workerParams) {
 
+    private val gson = Gson()
+
     override suspend fun doWork(): Result {
         val prefs = applicationContext.getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
         val targetLat = prefs.getFloat("work_lat", 0f).toDouble()
         val targetLng = prefs.getFloat("work_lng", 0f).toDouble()
         val radius = prefs.getFloat("work_radius", 150f)
 
+        // Exit if workplace GPS is not configured yet
         if (targetLat == 0.0 && targetLng == 0.0) return Result.success()
 
         val fusedClient = LocationServices.getFusedLocationProviderClient(applicationContext)
@@ -29,45 +34,72 @@ class LocationTrackerWorker(
             null
         }
 
-        location?.let {
+        val isInside = if (location != null) {
             val results = FloatArray(1)
-            Location.distanceBetween(it.latitude, it.longitude, targetLat, targetLng, results)
-            val isInside = results[0] <= radius
-
-            evaluateWorkTimeWindow(isInside)
+            Location.distanceBetween(location.latitude, location.longitude, targetLat, targetLng, results)
+            results[0] <= radius
+        } else {
+            false
         }
 
+        evaluateAndPersistAttendance(isInside, prefs)
         return Result.success()
     }
 
-    private fun evaluateWorkTimeWindow(isInsideWorkplace: Boolean) {
+    private fun evaluateAndPersistAttendance(isInside: Boolean, trackerPrefs: android.content.SharedPreferences) {
         val now = LocalTime.now()
         val today = LocalDate.now().toString()
+        val dayNum = LocalDate.now().dayOfMonth
 
-        val startDay = LocalTime.of(10, 0)
-        val halfSplit = LocalTime.of(15, 0)
-        val endDay = LocalTime.of(21, 0)
+        val h1Start = LocalTime.of(10, 0)
+        val splitTime = LocalTime.of(15, 0)
+        val h2End = LocalTime.of(21, 0)
 
-        // Only evaluate during official hours (10:00 AM - 9:00 PM)
-        if (now.isBefore(startDay) || now.isAfter(endDay)) return
-
-        val prefs = applicationContext.getSharedPreferences("attendance_records", Context.MODE_PRIVATE)
-        val currentStatus = prefs.getString("${today}_status", AttendanceStatus.NOT_MARKED.name)
-
-        // Auto transition logic
-        val newStatus = when {
-            isInsideWorkplace && (now.isAfter(startDay) && now.isBefore(halfSplit)) -> {
-                if (currentStatus == AttendanceStatus.NOT_MARKED.name) AttendanceStatus.HALF_DAY.name else currentStatus
+        // Record presence logs during shifts
+        if (isInside) {
+            if (now.isAfter(h1Start) && now.isBefore(splitTime)) {
+                trackerPrefs.edit().putBoolean("${today}_h1", true).apply()
             }
-            isInsideWorkplace && now.isAfter(halfSplit) -> {
-                AttendanceStatus.PRESENT.name
+            if (now.isAfter(splitTime) && now.isBefore(h2End)) {
+                trackerPrefs.edit().putBoolean("${today}_h2", true).apply()
             }
-            !isInsideWorkplace && currentStatus == AttendanceStatus.NOT_MARKED.name -> {
-                AttendanceStatus.ABSENT.name
-            }
-            else -> currentStatus
         }
 
-        prefs.edit().putString("${today}_status", newStatus).apply()
+        val wasInFirstHalf = trackerPrefs.getBoolean("${today}_h1", false)
+        val wasInSecondHalf = trackerPrefs.getBoolean("${today}_h2", false)
+
+        // Determine status
+        val calculatedStatus = when {
+            // After 9:00 PM -> Final Evaluation
+            now.isAfter(h2End) -> {
+                when {
+                    wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
+                    wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY
+                    else -> AttendanceStatus.ABSENT
+                }
+            }
+            // During shift progress
+            wasInFirstHalf && isInside && now.isAfter(splitTime) -> AttendanceStatus.PRESENT
+            wasInFirstHalf || (isInside && now.isAfter(h1Start)) -> AttendanceStatus.HALF_DAY
+            else -> AttendanceStatus.NOT_MARKED
+        }
+
+        // Save directly to main attendance database
+        val dbPrefs = applicationContext.getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
+        val json = dbPrefs.getString("records", null)
+        val type = object : TypeToken<MutableMap<String, DayAttendance>>() {}.type
+        val map: MutableMap<String, DayAttendance> = if (!json.isNullOrEmpty()) {
+            gson.fromJson(json, type)
+        } else {
+            mutableMapOf()
+        }
+
+        val existingDay = map[today] ?: DayAttendance(dateString = today, dayOfMonth = dayNum)
+
+        // Don't overwrite if manually edited
+        if (!existingDay.isManual && calculatedStatus != AttendanceStatus.NOT_MARKED) {
+            map[today] = existingDay.copy(workStatus = calculatedStatus)
+            dbPrefs.edit().putString("records", gson.toJson(map)).apply()
+        }
     }
 }
