@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -21,6 +22,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
@@ -37,6 +39,8 @@ fun AttendanceScreen(
 ) {
     var selectedDayForEdit by remember { mutableStateOf<DayAttendance?>(null) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+
+    val isLocationSet = settings.workLatitude != 0.0 && settings.workLongitude != 0.0
 
     val report = remember(currentMonth, attendanceMap.values.toList(), settings) {
         SalaryCalculator.calculate(currentMonth, attendanceMap, settings)
@@ -61,7 +65,7 @@ fun AttendanceScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // Month Header
+            // Month Header & GPS Actions
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -73,13 +77,18 @@ fun AttendanceScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Button(onClick = onSetLocation) {
-                    Text("Set Work GPS")
+                    Text(if (isLocationSet) "Update GPS" else "Set Work GPS")
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // 1. Calendar Table
+            // Work Location Indicator Badge
+            LocationStatusBadge(isLocationSet = isLocationSet, lat = settings.workLatitude, lng = settings.workLongitude)
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // 1. Calendar Table (with Today highlighted)
             CalendarView(
                 currentMonth = currentMonth,
                 attendanceMap = attendanceMap,
@@ -113,7 +122,7 @@ fun AttendanceScreen(
         )
     }
 
-    // Salary Inputs Dialog
+    // Salary Configuration Dialog
     if (showSettingsDialog) {
         SettingsDialog(
             initial = settings,
@@ -127,6 +136,43 @@ fun AttendanceScreen(
 }
 
 @Composable
+fun LocationStatusBadge(isLocationSet: Boolean, lat: Double, lng: Double) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = if (isLocationSet) Color(0xFFE8F5E9) else Color(0xFFFFEBEE),
+        border = BorderStroke(1.dp, if (isLocationSet) Color(0xFF4CAF50) else Color(0xFFF44336)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .background(if (isLocationSet) Color(0xFF2E7D32) else Color(0xFFD32F2F), CircleShape)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            if (isLocationSet) {
+                Text(
+                    text = "Workplace GPS: Set (%.4f, %.4f)".format(lat, lng),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1B5E20)
+                )
+            } else {
+                Text(
+                    text = "Workplace GPS: NOT Set (Tap 'Set Work GPS' at work)",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFC62828)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun CalendarView(
     currentMonth: YearMonth,
     attendanceMap: Map<String, DayAttendance>,
@@ -134,11 +180,12 @@ fun CalendarView(
 ) {
     val daysInMonth = currentMonth.lengthOfMonth()
     val days = listOf("M", "T", "W", "T", "F", "S", "S")
+    val todayString = LocalDate.now().toString()
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, Color.Gray, RoundedCornerShape(8.dp))
+            .border(1.dp, Color(0xFFCCCCCC), RoundedCornerShape(8.dp))
             .padding(8.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
@@ -147,7 +194,8 @@ fun CalendarView(
                     text = d,
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = Color.DarkGray
                 )
             }
         }
@@ -155,7 +203,7 @@ fun CalendarView(
 
         LazyVerticalGrid(
             columns = GridCells.Fixed(7),
-            modifier = Modifier.height(300.dp),
+            modifier = Modifier.height(310.dp),
             userScrollEnabled = false
         ) {
             val firstDayOffset = currentMonth.atDay(1).dayOfWeek.value - 1
@@ -167,9 +215,67 @@ fun CalendarView(
                 val dayNum = index + 1
                 val dateStr = currentMonth.atDay(dayNum).toString()
                 val record = attendanceMap[dateStr] ?: DayAttendance(dateStr, dayNum)
+                val isToday = (dateStr == todayString)
 
-                DayCell(day = record, onClick = { onDayClick(record) })
+                DayCell(day = record, isToday = isToday, onClick = { onDayClick(record) })
             }
+        }
+    }
+}
+
+@Composable
+fun DayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
+    val statusColor = when (day.workStatus) {
+        AttendanceStatus.PRESENT -> Color(0xFFC8E6C9)
+        AttendanceStatus.HALF_DAY -> Color(0xFFFFF59D)
+        AttendanceStatus.ABSENT -> Color(0xFFFFCDD2)
+        AttendanceStatus.NOT_MARKED -> Color(0xFFF9F9F9)
+    }
+
+    val cellBorder = if (isToday) {
+        BorderStroke(2.dp, Color(0xFF0D47A1)) // Prominent Blue border for Today
+    } else {
+        BorderStroke(0.5.dp, Color.LightGray)
+    }
+
+    Surface(
+        modifier = Modifier
+            .padding(2.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(4.dp),
+        color = statusColor,
+        border = cellBorder
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 3.dp, horizontal = 2.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (isToday) {
+                Text(
+                    text = "TODAY",
+                    fontSize = 7.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF0D47A1)
+                )
+            }
+            Text(
+                text = "${day.dayOfMonth}",
+                fontSize = 11.sp,
+                fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.Bold,
+                color = if (isToday) Color(0xFF0D47A1) else Color.Black
+            )
+            Text(
+                text = "W: ${day.workStatus.code}",
+                fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (day.workStatus == AttendanceStatus.ABSENT) Color.Red else Color.Black
+            )
+            Text(
+                text = "D: ${day.dabbaStatus.code}",
+                fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (day.dabbaStatus == DabbaStatus.ABSENT) Color.Red else Color.DarkGray
+            )
         }
     }
 }
@@ -206,7 +312,6 @@ fun AttendanceSummaryCard(
             )
             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-            // Work Attendance Section
             Text(
                 text = "Work Attendance",
                 fontWeight = FontWeight.Bold,
@@ -244,7 +349,6 @@ fun AttendanceSummaryCard(
 
             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-            // Dabba Section
             Text(
                 text = "Dabba Attendance",
                 fontWeight = FontWeight.Bold,
@@ -291,38 +395,6 @@ fun SummaryItemRow(
             color = textColor,
             fontWeight = FontWeight.Normal,
             modifier = Modifier.padding(start = 4.dp, top = 1.dp)
-        )
-    }
-}
-
-@Composable
-fun DayCell(day: DayAttendance, onClick: () -> Unit) {
-    val statusColor = when (day.workStatus) {
-        AttendanceStatus.PRESENT -> Color(0xFFC8E6C9)
-        AttendanceStatus.HALF_DAY -> Color(0xFFFFF59D)
-        AttendanceStatus.ABSENT -> Color(0xFFFFCDD2)
-        AttendanceStatus.NOT_MARKED -> Color(0xFFF5F5F5)
-    }
-
-    Column(
-        modifier = Modifier
-            .padding(2.dp)
-            .background(statusColor, RoundedCornerShape(4.dp))
-            .border(0.5.dp, Color.LightGray, RoundedCornerShape(4.dp))
-            .clickable { onClick() }
-            .padding(4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(text = "${day.dayOfMonth}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        Text(
-            text = "W: ${day.workStatus.code}",
-            fontSize = 10.sp,
-            color = if (day.workStatus == AttendanceStatus.ABSENT) Color.Red else Color.Black
-        )
-        Text(
-            text = "D: ${day.dabbaStatus.code}",
-            fontSize = 10.sp,
-            color = if (day.dabbaStatus == DabbaStatus.ABSENT) Color.Red else Color.DarkGray
         )
     }
 }
