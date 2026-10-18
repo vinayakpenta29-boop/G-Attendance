@@ -22,6 +22,8 @@ import androidx.work.WorkManager
 import com.google.android.gms.location.LocationServices
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import java.time.LocalDate
+import java.time.LocalTime
 import java.time.YearMonth
 import java.util.concurrent.TimeUnit
 
@@ -42,6 +44,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         loadData()
+        autoFinalizePostWorkHourAttendance()
         requestPermissions()
 
         setContent {
@@ -64,6 +67,39 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        loadData()
+        autoFinalizePostWorkHourAttendance()
+    }
+
+    // Instantly checks and marks attendance if opened after 9:00 PM
+    private fun autoFinalizePostWorkHourAttendance() {
+        val now = LocalTime.now()
+        val today = LocalDate.now().toString()
+        val dayNum = LocalDate.now().dayOfMonth
+
+        // Only evaluate if after 9:00 PM
+        if (now.isAfter(LocalTime.of(21, 0))) {
+            val trackerPrefs = getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
+            val wasInFirstHalf = trackerPrefs.getBoolean("${today}_h1", false)
+            val wasInSecondHalf = trackerPrefs.getBoolean("${today}_h2", false)
+
+            val currentRecord = attendanceMap[today] ?: DayAttendance(dateString = today, dayOfMonth = dayNum)
+
+            if (!currentRecord.isManual && currentRecord.workStatus == AttendanceStatus.NOT_MARKED) {
+                val finalStatus = when {
+                    wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
+                    wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY
+                    else -> AttendanceStatus.ABSENT
+                }
+                val updatedRecord = currentRecord.copy(workStatus = finalStatus)
+                attendanceMap[today] = updatedRecord
+                saveAttendance()
+            }
+        }
+    }
+
     private fun setCurrentLocationAsWork() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             Toast.makeText(this, "Location permission required", Toast.LENGTH_SHORT).show()
@@ -78,7 +114,9 @@ class MainActivity : ComponentActivity() {
                     .putFloat("work_lng", loc.longitude.toFloat())
                     .apply()
                 saveSettings()
-                Toast.makeText(this, "Workplace GPS locked to current spot!", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Workplace GPS locked successfully!", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this, "Could not acquire GPS. Turn ON device location.", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -114,6 +152,7 @@ class MainActivity : ComponentActivity() {
         if (!json.isNullOrEmpty()) {
             val type = object : TypeToken<Map<String, DayAttendance>>() {}.type
             val map: Map<String, DayAttendance> = gson.fromJson(json, type)
+            attendanceMap.clear()
             attendanceMap.putAll(map)
         }
 
