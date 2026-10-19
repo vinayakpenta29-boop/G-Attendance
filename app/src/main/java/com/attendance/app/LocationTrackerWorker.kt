@@ -24,7 +24,6 @@ class LocationTrackerWorker(
         val targetLng = prefs.getFloat("work_lng", 0f).toDouble()
         val radius = prefs.getFloat("work_radius", 150f)
 
-        // Exit if workplace GPS is not configured yet
         if (targetLat == 0.0 && targetLng == 0.0) return Result.success()
 
         val fusedClient = LocationServices.getFusedLocationProviderClient(applicationContext)
@@ -55,7 +54,6 @@ class LocationTrackerWorker(
         val splitTime = LocalTime.of(15, 0)
         val h2End = LocalTime.of(21, 0)
 
-        // Record presence logs during shifts
         if (isInside) {
             if (now.isAfter(h1Start) && now.isBefore(splitTime)) {
                 trackerPrefs.edit().putBoolean("${today}_h1", true).apply()
@@ -68,9 +66,7 @@ class LocationTrackerWorker(
         val wasInFirstHalf = trackerPrefs.getBoolean("${today}_h1", false)
         val wasInSecondHalf = trackerPrefs.getBoolean("${today}_h2", false)
 
-        // Determine status
         val calculatedStatus = when {
-            // After 9:00 PM -> Final Evaluation
             now.isAfter(h2End) -> {
                 when {
                     wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
@@ -78,13 +74,11 @@ class LocationTrackerWorker(
                     else -> AttendanceStatus.ABSENT
                 }
             }
-            // During shift progress
             wasInFirstHalf && isInside && now.isAfter(splitTime) -> AttendanceStatus.PRESENT
             wasInFirstHalf || (isInside && now.isAfter(h1Start)) -> AttendanceStatus.HALF_DAY
             else -> AttendanceStatus.NOT_MARKED
         }
 
-        // Save directly to main attendance database
         val dbPrefs = applicationContext.getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
         val json = dbPrefs.getString("records", null)
         val type = object : TypeToken<MutableMap<String, DayAttendance>>() {}.type
@@ -96,9 +90,15 @@ class LocationTrackerWorker(
 
         val existingDay = map[today] ?: DayAttendance(dateString = today, dayOfMonth = dayNum)
 
-        // Don't overwrite if manually edited
         if (!existingDay.isManual && calculatedStatus != AttendanceStatus.NOT_MARKED) {
-            map[today] = existingDay.copy(workStatus = calculatedStatus)
+            // Auto-assign Dabba to A if Absent or Half-Day
+            val autoDabba = if (calculatedStatus == AttendanceStatus.ABSENT || calculatedStatus == AttendanceStatus.HALF_DAY) {
+                DabbaStatus.ABSENT
+            } else {
+                existingDay.dabbaStatus
+            }
+
+            map[today] = existingDay.copy(workStatus = calculatedStatus, dabbaStatus = autoDabba)
             dbPrefs.edit().putString("records", gson.toJson(map)).apply()
         }
     }
