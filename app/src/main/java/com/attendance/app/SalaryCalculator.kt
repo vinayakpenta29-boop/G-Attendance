@@ -48,8 +48,12 @@ object SalaryCalculator {
                 else -> {}
             }
 
-            // A, G, D, and L all trigger Dabba deduction
-            if (record?.dabbaStatus?.isAbsent == true) {
+            // Dabba absent if explicitly absent (A, G, D, L) OR if work attendance is Absent/Half-Day
+            val isDabbaAbsent = record?.dabbaStatus?.isAbsent == true ||
+                    record?.workStatus == AttendanceStatus.ABSENT ||
+                    record?.workStatus == AttendanceStatus.HALF_DAY
+
+            if (isDabbaAbsent) {
                 dabbaAbsentCount++
             }
         }
