@@ -110,7 +110,7 @@ fun AttendanceScreen(
         }
     }
 
-    // Manual Edit Dialog
+    // Manual Edit Dialog with Dabba Auto-Lock
     selectedDayForEdit?.let { day ->
         EditAttendanceDialog(
             day = day,
@@ -214,7 +214,15 @@ fun CalendarView(
             items(daysInMonth) { index ->
                 val dayNum = index + 1
                 val dateStr = currentMonth.atDay(dayNum).toString()
-                val record = attendanceMap[dateStr] ?: DayAttendance(dateStr, dayNum)
+                val record = attendanceMap[dateStr]?.let {
+                    // Enforce Dabba absent by default if work attendance is A or H
+                    if ((it.workStatus == AttendanceStatus.ABSENT || it.workStatus == AttendanceStatus.HALF_DAY) && it.dabbaStatus != DabbaStatus.ABSENT) {
+                        it.copy(dabbaStatus = DabbaStatus.ABSENT)
+                    } else {
+                        it
+                    }
+                } ?: DayAttendance(dateStr, dayNum)
+
                 val isToday = (dateStr == todayString)
 
                 DayCell(day = record, isToday = isToday, onClick = { onDayClick(record) })
@@ -292,15 +300,19 @@ fun AttendanceSummaryCard(
     val daysInMonth = currentMonth.lengthOfMonth()
     val records = (1..daysInMonth).map { day ->
         val dateStr = currentMonth.atDay(day).toString()
-        attendanceMap[dateStr] ?: DayAttendance(dateStr, day)
+        val r = attendanceMap[dateStr] ?: DayAttendance(dateStr, day)
+        // Ensure A or H days are tracked as Dabba absent
+        if ((r.workStatus == AttendanceStatus.ABSENT || r.workStatus == AttendanceStatus.HALF_DAY) && r.dabbaStatus != DabbaStatus.ABSENT) {
+            r.copy(dabbaStatus = DabbaStatus.ABSENT)
+        } else {
+            r
+        }
     }
 
-    // Work attendance categorization
     val absentDays = records.filter { it.workStatus == AttendanceStatus.ABSENT }
     val halfDays = records.filter { it.workStatus == AttendanceStatus.HALF_DAY }
     val totalLeaves = absentDays.size + (halfDays.size * 0.5)
 
-    // Dabba category-wise breakdown
     val dabbaA = records.filter { it.dabbaStatus == DabbaStatus.ABSENT }
     val dabbaG = records.filter { it.dabbaStatus == DabbaStatus.G }
     val dabbaD = records.filter { it.dabbaStatus == DabbaStatus.D }
@@ -322,7 +334,6 @@ fun AttendanceSummaryCard(
             )
             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-            // Work Section
             Text(text = "Work Attendance", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(modifier = Modifier.height(4.dp))
 
@@ -355,7 +366,6 @@ fun AttendanceSummaryCard(
 
             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-            // Dabba Section (Itemized Category-Wise)
             Text(text = "Dabba Attendance (Absents by Category)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(modifier = Modifier.height(4.dp))
 
@@ -510,7 +520,18 @@ fun EditAttendanceDialog(
     onSave: (DayAttendance) -> Unit
 ) {
     var workStatus by remember { mutableStateOf(day.workStatus) }
-    var dabbaStatus by remember { mutableStateOf(day.dabbaStatus) }
+    var dabbaStatus by remember {
+        mutableStateOf(
+            if (day.workStatus == AttendanceStatus.ABSENT || day.workStatus == AttendanceStatus.HALF_DAY) {
+                DabbaStatus.ABSENT
+            } else {
+                day.dabbaStatus
+            }
+        )
+    }
+
+    // Auto-detect if Work Attendance requires Dabba to lock to 'A'
+    val isWorkAbsentOrHalf = workStatus == AttendanceStatus.ABSENT || workStatus == AttendanceStatus.HALF_DAY
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -522,7 +543,13 @@ fun EditAttendanceDialog(
                     listOf(AttendanceStatus.PRESENT, AttendanceStatus.HALF_DAY, AttendanceStatus.ABSENT).forEach { st ->
                         FilterChip(
                             selected = workStatus == st,
-                            onClick = { workStatus = st },
+                            onClick = {
+                                workStatus = st
+                                // Automatically switch Dabba to "A" when "A" or "H" is selected
+                                if (st == AttendanceStatus.ABSENT || st == AttendanceStatus.HALF_DAY) {
+                                    dabbaStatus = DabbaStatus.ABSENT
+                                }
+                            },
                             label = { Text(st.code) }
                         )
                     }
@@ -531,11 +558,22 @@ fun EditAttendanceDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text("Dabba Attendance (₹900/mo):", fontWeight = FontWeight.Bold)
-                Text(
-                    text = "P = Present | A, G, D, L = Absent | - = Unset",
-                    fontSize = 11.sp,
-                    color = Color.Gray
-                )
+
+                if (isWorkAbsentOrHalf) {
+                    Text(
+                        text = "Work is '${workStatus.code}' → Dabba auto-set to 'A' (Others Disabled)",
+                        fontSize = 11.sp,
+                        color = Color(0xFFD32F2F),
+                        fontWeight = FontWeight.Bold
+                    )
+                } else {
+                    Text(
+                        text = "P = Present | A, G, D, L = Absent | - = Unset",
+                        fontSize = 11.sp,
+                        color = Color.Gray
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(6.dp))
 
                 // Dabba Chips: P, A, G, D, L, and -
@@ -551,9 +589,17 @@ fun EditAttendanceDialog(
                         DabbaStatus.L,
                         DabbaStatus.NOT_MARKED
                     ).forEach { st ->
+                        // If work is A or H, disable all chips except 'A'
+                        val isEnabled = !isWorkAbsentOrHalf || st == DabbaStatus.ABSENT
+
                         FilterChip(
                             selected = dabbaStatus == st,
-                            onClick = { dabbaStatus = st },
+                            onClick = {
+                                if (isEnabled) {
+                                    dabbaStatus = st
+                                }
+                            },
+                            enabled = isEnabled,
                             label = { Text(st.code, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                         )
                     }
@@ -562,7 +608,8 @@ fun EditAttendanceDialog(
         },
         confirmButton = {
             Button(onClick = {
-                onSave(day.copy(workStatus = workStatus, dabbaStatus = dabbaStatus, isManual = true))
+                val finalDabba = if (isWorkAbsentOrHalf) DabbaStatus.ABSENT else dabbaStatus
+                onSave(day.copy(workStatus = workStatus, dabbaStatus = finalDabba, isManual = true))
             }) {
                 Text("Save")
             }
