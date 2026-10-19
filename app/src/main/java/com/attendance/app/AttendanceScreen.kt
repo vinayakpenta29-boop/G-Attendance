@@ -65,7 +65,7 @@ fun AttendanceScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // Month Header & GPS Actions
+            // Month Header & Location Trigger
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -88,7 +88,7 @@ fun AttendanceScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 1. Calendar Table (with Today highlighted)
+            // 1. Calendar View
             CalendarView(
                 currentMonth = currentMonth,
                 attendanceMap = attendanceMap,
@@ -97,7 +97,7 @@ fun AttendanceScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 2. Summary Box: Absent, H-Days, Total Leaves & Dabba Absents
+            // 2. Summary Box (Itemized Dabba Categories)
             AttendanceSummaryCard(
                 currentMonth = currentMonth,
                 attendanceMap = attendanceMap
@@ -233,7 +233,7 @@ fun DayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
     }
 
     val cellBorder = if (isToday) {
-        BorderStroke(2.dp, Color(0xFF0D47A1)) // Prominent Blue border for Today
+        BorderStroke(2.dp, Color(0xFF0D47A1))
     } else {
         BorderStroke(0.5.dp, Color.LightGray)
     }
@@ -273,8 +273,12 @@ fun DayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
             Text(
                 text = "D: ${day.dabbaStatus.code}",
                 fontSize = 9.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = if (day.dabbaStatus == DabbaStatus.ABSENT) Color.Red else Color.DarkGray
+                fontWeight = FontWeight.Bold,
+                color = when {
+                    day.dabbaStatus.isAbsent -> Color.Red
+                    day.dabbaStatus == DabbaStatus.PRESENT -> Color(0xFF2E7D32)
+                    else -> Color.Gray
+                }
             )
         }
     }
@@ -291,11 +295,17 @@ fun AttendanceSummaryCard(
         attendanceMap[dateStr] ?: DayAttendance(dateStr, day)
     }
 
+    // Work attendance categorization
     val absentDays = records.filter { it.workStatus == AttendanceStatus.ABSENT }
     val halfDays = records.filter { it.workStatus == AttendanceStatus.HALF_DAY }
-    val dabbaAbsentDays = records.filter { it.dabbaStatus == DabbaStatus.ABSENT }
-
     val totalLeaves = absentDays.size + (halfDays.size * 0.5)
+
+    // Dabba category-wise breakdown
+    val dabbaA = records.filter { it.dabbaStatus == DabbaStatus.ABSENT }
+    val dabbaG = records.filter { it.dabbaStatus == DabbaStatus.G }
+    val dabbaD = records.filter { it.dabbaStatus == DabbaStatus.D }
+    val dabbaL = records.filter { it.dabbaStatus == DabbaStatus.L }
+    val totalDabbaAbsent = dabbaA.size + dabbaG.size + dabbaD.size + dabbaL.size
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -312,12 +322,8 @@ fun AttendanceSummaryCard(
             )
             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-            Text(
-                text = "Work Attendance",
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = Color(0xFF333333)
-            )
+            // Work Section
+            Text(text = "Work Attendance", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(modifier = Modifier.height(4.dp))
 
             SummaryItemRow(
@@ -349,19 +355,35 @@ fun AttendanceSummaryCard(
 
             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-            Text(
-                text = "Dabba Attendance",
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = Color(0xFF333333)
-            )
+            // Dabba Section (Itemized Category-Wise)
+            Text(text = "Dabba Attendance (Absents by Category)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(modifier = Modifier.height(4.dp))
 
             SummaryItemRow(
-                label = "Dabba Absent Dates:",
-                dateList = if (dabbaAbsentDays.isEmpty()) "None" else dabbaAbsentDays.joinToString(", ") { "${it.dayOfMonth}" },
-                textColor = if (dabbaAbsentDays.isNotEmpty()) Color(0xFFD32F2F) else Color.DarkGray
+                label = "\"A\" Dabba Count (${dabbaA.size}):",
+                dateList = if (dabbaA.isEmpty()) "None" else dabbaA.joinToString(", ") { "${it.dayOfMonth}" },
+                textColor = if (dabbaA.isNotEmpty()) Color(0xFFD32F2F) else Color.DarkGray
             )
+
+            SummaryItemRow(
+                label = "\"G\" Dabba Count (${dabbaG.size}):",
+                dateList = if (dabbaG.isEmpty()) "None" else dabbaG.joinToString(", ") { "${it.dayOfMonth}" },
+                textColor = if (dabbaG.isNotEmpty()) Color(0xFFD32F2F) else Color.DarkGray
+            )
+
+            SummaryItemRow(
+                label = "\"D\" Dabba Count (${dabbaD.size}):",
+                dateList = if (dabbaD.isEmpty()) "None" else dabbaD.joinToString(", ") { "${it.dayOfMonth}" },
+                textColor = if (dabbaD.isNotEmpty()) Color(0xFFD32F2F) else Color.DarkGray
+            )
+
+            SummaryItemRow(
+                label = "\"L\" Dabba Count (${dabbaL.size}):",
+                dateList = if (dabbaL.isEmpty()) "None" else dabbaL.joinToString(", ") { "${it.dayOfMonth}" },
+                textColor = if (dabbaL.isNotEmpty()) Color(0xFFD32F2F) else Color.DarkGray
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
 
             Row(
                 modifier = Modifier
@@ -369,12 +391,12 @@ fun AttendanceSummaryCard(
                     .padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(text = "Total Dabba Absent:", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(text = "Total Dabba Absent (A+G+D+L):", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 Text(
-                    text = "${dabbaAbsentDays.size} Days",
-                    fontWeight = FontWeight.Bold,
+                    text = "$totalDabbaAbsent Days",
+                    fontWeight = FontWeight.ExtraBold,
                     fontSize = 13.sp,
-                    color = if (dabbaAbsentDays.isNotEmpty()) Color(0xFFD32F2F) else Color(0xFF2E7D32)
+                    color = if (totalDabbaAbsent > 0) Color(0xFFD32F2F) else Color(0xFF2E7D32)
                 )
             }
         }
@@ -440,7 +462,7 @@ fun SalaryReportCard(report: SalaryReport) {
             }
 
             SalaryRow("Medical Fund", "-₹%.2f".format(report.medicalDeduction), Color.Red)
-            SalaryRow("Dabba Deduction (${report.dabbaAbsentDays} Days A)", "-₹%.2f".format(report.dabbaDeduction), Color.Red)
+            SalaryRow("Dabba Deduction (${report.dabbaAbsentDays} Days Absent)", "-₹%.2f".format(report.dabbaDeduction), Color.Red)
 
             Divider(modifier = Modifier.padding(vertical = 8.dp))
             SalaryRow("Total Deductions", "-₹%.2f".format(report.totalDeduction), Color.Red, isBold = true)
@@ -494,9 +516,9 @@ fun EditAttendanceDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit Day: ${day.dateString}") },
         text = {
-            Column {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Text("Work Attendance:", fontWeight = FontWeight.Bold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(AttendanceStatus.PRESENT, AttendanceStatus.HALF_DAY, AttendanceStatus.ABSENT).forEach { st ->
                         FilterChip(
                             selected = workStatus == st,
@@ -507,13 +529,32 @@ fun EditAttendanceDialog(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
+
                 Text("Dabba Attendance (₹900/mo):", fontWeight = FontWeight.Bold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(DabbaStatus.PRESENT, DabbaStatus.ABSENT).forEach { st ->
+                Text(
+                    text = "P = Present | A, G, D, L = Absent | - = Unset",
+                    fontSize = 11.sp,
+                    color = Color.Gray
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Dabba Chips: P, A, G, D, L, and -
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    listOf(
+                        DabbaStatus.PRESENT,
+                        DabbaStatus.ABSENT,
+                        DabbaStatus.G,
+                        DabbaStatus.D,
+                        DabbaStatus.L,
+                        DabbaStatus.NOT_MARKED
+                    ).forEach { st ->
                         FilterChip(
                             selected = dabbaStatus == st,
                             onClick = { dabbaStatus = st },
-                            label = { Text(st.code) }
+                            label = { Text(st.code, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                         )
                     }
                 }
