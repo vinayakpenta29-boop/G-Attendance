@@ -7,17 +7,20 @@ enum class AttendanceStatus(val code: String) {
     NOT_MARKED("-")
 }
 
-enum class DabbaStatus(val code: String) {
-    PRESENT("P"),
-    ABSENT("A"),
-    NOT_MARKED("-")
+enum class DabbaStatus(val code: String, val isAbsent: Boolean) {
+    NOT_MARKED("-", false),
+    PRESENT("P", false),
+    ABSENT("A", true),
+    G("G", true),
+    D("D", true),
+    L("L", true)
 }
 
 data class DayAttendance(
     val dateString: String, // Format: "yyyy-MM-dd"
     val dayOfMonth: Int,
     var workStatus: AttendanceStatus = AttendanceStatus.NOT_MARKED,
-    var dabbaStatus: DabbaStatus = AttendanceStatus.NOT_MARKED.let { DabbaStatus.PRESENT },
+    var dabbaStatus: DabbaStatus = DabbaStatus.NOT_MARKED,
     var isManual: Boolean = false
 )
 
