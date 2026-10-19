@@ -59,7 +59,13 @@ class MainActivity : ComponentActivity() {
                     saveSettings()
                 },
                 onUpdateDay = { day ->
-                    attendanceMap[day.dateString] = day
+                    // Enforce Dabba Absent if work status is A or H
+                    val finalDay = if (day.workStatus == AttendanceStatus.ABSENT || day.workStatus == AttendanceStatus.HALF_DAY) {
+                        day.copy(dabbaStatus = DabbaStatus.ABSENT)
+                    } else {
+                        day
+                    }
+                    attendanceMap[finalDay.dateString] = finalDay
                     saveAttendance()
                 },
                 onSetLocation = { setCurrentLocationAsWork() }
@@ -79,7 +85,6 @@ class MainActivity : ComponentActivity() {
         val today = LocalDate.now().toString()
         val dayNum = LocalDate.now().dayOfMonth
 
-        // Only evaluate if after 9:00 PM
         if (now.isAfter(LocalTime.of(21, 0))) {
             val trackerPrefs = getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
             val wasInFirstHalf = trackerPrefs.getBoolean("${today}_h1", false)
@@ -93,7 +98,15 @@ class MainActivity : ComponentActivity() {
                     wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY
                     else -> AttendanceStatus.ABSENT
                 }
-                val updatedRecord = currentRecord.copy(workStatus = finalStatus)
+
+                // Auto-set Dabba to A if Absent or Half-day
+                val finalDabba = if (finalStatus == AttendanceStatus.ABSENT || finalStatus == AttendanceStatus.HALF_DAY) {
+                    DabbaStatus.ABSENT
+                } else {
+                    currentRecord.dabbaStatus
+                }
+
+                val updatedRecord = currentRecord.copy(workStatus = finalStatus, dabbaStatus = finalDabba)
                 attendanceMap[today] = updatedRecord
                 saveAttendance()
             }
@@ -152,8 +165,18 @@ class MainActivity : ComponentActivity() {
         if (!json.isNullOrEmpty()) {
             val type = object : TypeToken<Map<String, DayAttendance>>() {}.type
             val map: Map<String, DayAttendance> = gson.fromJson(json, type)
+
+            // Auto-correct any existing records where work was A or H to have Dabba A
+            val sanitized = map.mapValues { (_, day) ->
+                if ((day.workStatus == AttendanceStatus.ABSENT || day.workStatus == AttendanceStatus.HALF_DAY) && day.dabbaStatus != DabbaStatus.ABSENT) {
+                    day.copy(dabbaStatus = DabbaStatus.ABSENT)
+                } else {
+                    day
+                }
+            }
+
             attendanceMap.clear()
-            attendanceMap.putAll(map)
+            attendanceMap.putAll(sanitized)
         }
 
         val setJson = sp.getString("settings", null)
