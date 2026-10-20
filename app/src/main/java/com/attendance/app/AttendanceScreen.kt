@@ -39,6 +39,7 @@ fun AttendanceScreen(
 ) {
     var selectedDayForEdit by remember { mutableStateOf<DayAttendance?>(null) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(false) }
 
     val isLocationSet = settings.workLatitude != 0.0 && settings.workLongitude != 0.0
 
@@ -51,8 +52,34 @@ fun AttendanceScreen(
             TopAppBar(
                 title = { Text("Attendance & Payroll", fontWeight = FontWeight.Bold) },
                 actions = {
-                    Button(onClick = { showSettingsDialog = true }) {
-                        Text("Config")
+                    // Three-Dots Menu Trigger
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Text(
+                            text = "⋮",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    // Three-Dots Dropdown Options
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Salary Config") },
+                            onClick = {
+                                menuExpanded = false
+                                showSettingsDialog = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (isLocationSet) "Update Work GPS" else "Set Work GPS") },
+                            onClick = {
+                                menuExpanded = false
+                                onSetLocation()
+                            }
+                        )
                     }
                 }
             )
@@ -65,21 +92,13 @@ fun AttendanceScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // Month Header & Location Trigger
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "${currentMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)} ${currentMonth.year}",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Button(onClick = onSetLocation) {
-                    Text(if (isLocationSet) "Update GPS" else "Set Work GPS")
-                }
-            }
+            // Month Header
+            Text(
+                text = "${currentMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)} ${currentMonth.year}",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -162,7 +181,7 @@ fun LocationStatusBadge(isLocationSet: Boolean, lat: Double, lng: Double) {
                 )
             } else {
                 Text(
-                    text = "Workplace GPS: NOT Set (Tap 'Set Work GPS' at work)",
+                    text = "Workplace GPS: NOT Set (Open ⋮ menu -> 'Set Work GPS')",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFFC62828)
@@ -215,7 +234,6 @@ fun CalendarView(
                 val dayNum = index + 1
                 val dateStr = currentMonth.atDay(dayNum).toString()
                 val record = attendanceMap[dateStr]?.let {
-                    // Enforce Dabba absent by default if work attendance is A or H
                     if ((it.workStatus == AttendanceStatus.ABSENT || it.workStatus == AttendanceStatus.HALF_DAY) && it.dabbaStatus != DabbaStatus.ABSENT) {
                         it.copy(dabbaStatus = DabbaStatus.ABSENT)
                     } else {
@@ -301,7 +319,6 @@ fun AttendanceSummaryCard(
     val records = (1..daysInMonth).map { day ->
         val dateStr = currentMonth.atDay(day).toString()
         val r = attendanceMap[dateStr] ?: DayAttendance(dateStr, day)
-        // Ensure A or H days are tracked as Dabba absent
         if ((r.workStatus == AttendanceStatus.ABSENT || r.workStatus == AttendanceStatus.HALF_DAY) && r.dabbaStatus != DabbaStatus.ABSENT) {
             r.copy(dabbaStatus = DabbaStatus.ABSENT)
         } else {
@@ -530,7 +547,6 @@ fun EditAttendanceDialog(
         )
     }
 
-    // Auto-detect if Work Attendance requires Dabba to lock to 'A'
     val isWorkAbsentOrHalf = workStatus == AttendanceStatus.ABSENT || workStatus == AttendanceStatus.HALF_DAY
 
     AlertDialog(
@@ -545,7 +561,6 @@ fun EditAttendanceDialog(
                             selected = workStatus == st,
                             onClick = {
                                 workStatus = st
-                                // Automatically switch Dabba to "A" when "A" or "H" is selected
                                 if (st == AttendanceStatus.ABSENT || st == AttendanceStatus.HALF_DAY) {
                                     dabbaStatus = DabbaStatus.ABSENT
                                 }
@@ -576,7 +591,6 @@ fun EditAttendanceDialog(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // Dabba Chips: P, A, G, D, L, and -
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -589,7 +603,6 @@ fun EditAttendanceDialog(
                         DabbaStatus.L,
                         DabbaStatus.NOT_MARKED
                     ).forEach { st ->
-                        // If work is A or H, disable all chips except 'A'
                         val isEnabled = !isWorkAbsentOrHalf || st == DabbaStatus.ABSENT
 
                         FilterChip(
