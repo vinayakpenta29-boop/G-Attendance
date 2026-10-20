@@ -37,14 +37,17 @@ fun AttendanceScreen(
     onUpdateDay: (DayAttendance) -> Unit,
     onSetLocation: () -> Unit
 ) {
+    // Allows navigating backwards and forwards through months
+    var displayedMonth by remember { mutableStateOf(currentMonth) }
     var selectedDayForEdit by remember { mutableStateOf<DayAttendance?>(null) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
 
     val isLocationSet = settings.workLatitude != 0.0 && settings.workLongitude != 0.0
 
-    val report = remember(currentMonth, attendanceMap.values.toList(), settings) {
-        SalaryCalculator.calculate(currentMonth, attendanceMap, settings)
+    // Automatically recalculates report when displayedMonth changes
+    val report = remember(displayedMonth, attendanceMap.values.toList(), settings) {
+        SalaryCalculator.calculate(displayedMonth, attendanceMap, settings)
     }
 
     Scaffold(
@@ -52,7 +55,6 @@ fun AttendanceScreen(
             TopAppBar(
                 title = { Text("Attendance & Payroll", fontWeight = FontWeight.Bold) },
                 actions = {
-                    // Three-Dots Menu Trigger
                     IconButton(onClick = { menuExpanded = true }) {
                         Text(
                             text = "⋮",
@@ -61,7 +63,6 @@ fun AttendanceScreen(
                         )
                     }
 
-                    // Three-Dots Dropdown Options
                     DropdownMenu(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false }
@@ -92,39 +93,83 @@ fun AttendanceScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // Month Header
-            Text(
-                text = "${currentMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)} ${currentMonth.year}",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            // Month Navigation Bar (Previous, Month Title, Next)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Previous Month Button
+                    FilledTonalIconButton(
+                        onClick = { displayedMonth = displayedMonth.minusMonths(1) },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Text(text = "◀", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
 
-            Spacer(modifier = Modifier.height(8.dp))
+                    // Month & Year Display (Clickable to jump back to current month)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.clickable { displayedMonth = YearMonth.now() }
+                    ) {
+                        Text(
+                            text = "${displayedMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)} ${displayedMonth.year}",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (displayedMonth != YearMonth.now()) {
+                            Text(
+                                text = "Tap to reset to Current Month",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    // Next Month Button
+                    FilledTonalIconButton(
+                        onClick = { displayedMonth = displayedMonth.plusMonths(1) },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Text(text = "▶", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Work Location Indicator Badge
             LocationStatusBadge(isLocationSet = isLocationSet, lat = settings.workLatitude, lng = settings.workLongitude)
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 1. Calendar View
+            // 1. Calendar View for displayedMonth
             CalendarView(
-                currentMonth = currentMonth,
+                currentMonth = displayedMonth,
                 attendanceMap = attendanceMap,
                 onDayClick = { selectedDayForEdit = it }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 2. Summary Box (Itemized Dabba Categories)
+            // 2. Summary Box for displayedMonth
             AttendanceSummaryCard(
-                currentMonth = currentMonth,
+                currentMonth = displayedMonth,
                 attendanceMap = attendanceMap
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 3. Salary Breakdown Card
+            // 3. Salary Breakdown Card for displayedMonth
             SalaryReportCard(report = report)
         }
     }
