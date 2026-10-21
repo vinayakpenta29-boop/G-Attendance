@@ -471,9 +471,11 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
         border = BorderStroke(if (isToday) 1.8.dp else 1.dp, borderColor)
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 4.dp, horizontal = 2.dp),
+            modifier = Modifier
+                .padding(vertical = 4.dp, horizontal = 1.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Badge for Today or Holiday
             if (isToday) {
                 Text(
                     text = "TODAY",
@@ -483,15 +485,17 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
                 )
             } else if (day.isHoliday) {
                 Text(
-                    text = "OFF",
-                    fontSize = 6.5.sp,
+                    text = "HOLIDAY",
+                    fontSize = 6.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFFEA580C)
+                    color = Color(0xFFEA580C),
+                    maxLines = 1
                 )
             } else {
                 Spacer(modifier = Modifier.height(9.dp))
             }
 
+            // Day Number
             Text(
                 text = "${day.dayOfMonth}",
                 fontSize = 12.sp,
@@ -501,6 +505,7 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
 
             Spacer(modifier = Modifier.height(2.dp))
 
+            // Work Attendance Badge
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(3.dp))
@@ -524,6 +529,7 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
 
             Spacer(modifier = Modifier.height(2.dp))
 
+            // Dabba Status Tag
             Text(
                 text = "D: ${day.safeDabbaStatus.code}",
                 fontSize = 8.5.sp,
@@ -537,6 +543,7 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
         }
     }
 }
+
 
 @Composable
 fun ModernSummaryDashboard(
