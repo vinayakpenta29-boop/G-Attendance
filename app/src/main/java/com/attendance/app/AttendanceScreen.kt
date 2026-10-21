@@ -194,14 +194,15 @@ fun AttendanceScreen(
             displayedMonth = displayedMonth,
             attendanceMap = attendanceMap,
             onDismiss = { showHolidayDialog = false },
-            onSaveHolidays = { holidayDaysSet ->
+            onSaveHolidays = { holidayMap ->
                 val daysInMonth = displayedMonth.lengthOfMonth()
                 for (day in 1..daysInMonth) {
                     val dateStr = displayedMonth.atDay(day).toString()
                     val existing = attendanceMap[dateStr] ?: DayAttendance(dateStr, day)
-                    val isMarkedHoliday = holidayDaysSet.contains(day)
-                    if (existing.isHoliday != isMarkedHoliday) {
-                        onUpdateDay(existing.copy(isHoliday = isMarkedHoliday))
+                    val hName = holidayMap[day]
+                    val isHoliday = hName != null
+                    if (existing.isHoliday != isHoliday || existing.holidayName != (hName ?: "")) {
+                        onUpdateDay(existing.copy(isHoliday = isHoliday, holidayName = hName ?: ""))
                     }
                 }
                 showHolidayDialog = false
@@ -319,18 +320,17 @@ fun CalendarView(
 
 @Composable
 fun DayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
-    // If not marked but marked as holiday, show soft amber color
     val statusColor = when {
         day.workStatus == AttendanceStatus.PRESENT -> Color(0xFFC8E6C9)
         day.workStatus == AttendanceStatus.HALF_DAY -> Color(0xFFFFF59D)
         day.workStatus == AttendanceStatus.ABSENT -> Color(0xFFFFCDD2)
-        day.isHoliday -> Color(0xFFFFE0B2) // Warm amber holiday tint
+        day.isHoliday -> Color(0xFFFFE0B2)
         else -> Color(0xFFF9F9F9)
     }
 
     val cellBorder = when {
-        isToday -> BorderStroke(2.dp, Color(0xFF0D47A1)) // Prominent Blue border for today
-        day.isHoliday -> BorderStroke(1.5.dp, Color(0xFFFF9800)) // Amber border for holidays
+        isToday -> BorderStroke(2.dp, Color(0xFF0D47A1))
+        day.isHoliday -> BorderStroke(1.5.dp, Color(0xFFFF9800))
         else -> BorderStroke(0.5.dp, Color.LightGray)
     }
 
@@ -453,7 +453,9 @@ fun AttendanceSummaryCard(
             if (holidayDays.isNotEmpty()) {
                 SummaryItemRow(
                     label = "Holidays Marked (${holidayDays.size}):",
-                    dateList = holidayDays.joinToString(", ") { "${it.dayOfMonth}" },
+                    dateList = holidayDays.joinToString(", ") {
+                        if (it.holidayName.isNotBlank()) "${it.dayOfMonth} (${it.holidayName})" else "${it.dayOfMonth}"
+                    },
                     textColor = Color(0xFFE65100)
                 )
             }
@@ -623,27 +625,31 @@ fun SalaryRow(label: String, value: String, color: Color = Color.Unspecified, is
     }
 }
 
-// Dialog for Managing Monthly Holidays
+// Dialog for Managing Monthly Holidays with Instant Pop-up for Name
 @Composable
 fun ManageHolidayDialog(
     displayedMonth: YearMonth,
     attendanceMap: Map<String, DayAttendance>,
     onDismiss: () -> Unit,
-    onSaveHolidays: (Set<Int>) -> Unit
+    onSaveHolidays: (Map<Int, String>) -> Unit
 ) {
     val daysInMonth = displayedMonth.lengthOfMonth()
 
-    // Pre-populate with currently saved holidays for this month
-    val selectedHolidays = remember {
-        mutableStateListOf<Int>().apply {
+    // Map of dayNumber -> holidayName
+    val holidayMap = remember {
+        mutableStateMapOf<Int, String>().apply {
             for (day in 1..daysInMonth) {
                 val dateStr = displayedMonth.atDay(day).toString()
-                if (attendanceMap[dateStr]?.isHoliday == true) {
-                    add(day)
+                val record = attendanceMap[dateStr]
+                if (record?.isHoliday == true) {
+                    put(day, record.holidayName.ifBlank { "Holiday" })
                 }
             }
         }
     }
+
+    // Selected day to edit holiday name in popup
+    var editingDay by remember { mutableStateOf<Int?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -657,13 +663,12 @@ fun ManageHolidayDialog(
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "Tap date numbers to mark/unmark as holiday:",
+                    text = "Tap a date to enter/edit holiday name:",
                     fontSize = 12.sp,
                     color = Color.DarkGray
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Interactive 7-Column Day Grid
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(7),
                     modifier = Modifier
@@ -672,35 +677,31 @@ fun ManageHolidayDialog(
                 ) {
                     items(daysInMonth) { index ->
                         val dayNum = index + 1
-                        val isSelected = selectedHolidays.contains(dayNum)
+                        val isHoliday = holidayMap.containsKey(dayNum)
 
                         Box(
                             modifier = Modifier
                                 .padding(3.dp)
                                 .size(36.dp)
                                 .background(
-                                    if (isSelected) Color(0xFFFF9800) else Color(0xFFEEEEEE),
+                                    if (isHoliday) Color(0xFFFF9800) else Color(0xFFEEEEEE),
                                     RoundedCornerShape(6.dp)
                                 )
                                 .border(
                                     1.dp,
-                                    if (isSelected) Color(0xFFE65100) else Color.LightGray,
+                                    if (isHoliday) Color(0xFFE65100) else Color.LightGray,
                                     RoundedCornerShape(6.dp)
                                 )
                                 .clickable {
-                                    if (isSelected) {
-                                        selectedHolidays.remove(dayNum)
-                                    } else {
-                                        selectedHolidays.add(dayNum)
-                                    }
+                                    editingDay = dayNum
                                 },
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = "$dayNum",
                                 fontSize = 12.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) Color.White else Color.Black
+                                fontWeight = if (isHoliday) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isHoliday) Color.White else Color.Black
                             )
                         }
                     }
@@ -708,18 +709,40 @@ fun ManageHolidayDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                val sorted = selectedHolidays.sorted()
-                Text(
-                    text = "Selected (${sorted.size}): " + if (sorted.isEmpty()) "None" else sorted.joinToString(", "),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFFE65100)
-                )
+                // List of configured holidays with their names
+                if (holidayMap.isNotEmpty()) {
+                    Text(
+                        text = "Marked Holidays:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE65100)
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 80.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        holidayMap.toSortedMap().forEach { (day, name) ->
+                            Text(
+                                text = "• Day $day: $name",
+                                fontSize = 11.sp,
+                                color = Color(0xFFBF360C)
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "No holidays marked yet.",
+                        fontSize = 11.sp,
+                        color = Color.Gray
+                    )
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onSaveHolidays(selectedHolidays.toSet()) },
+                onClick = { onSaveHolidays(holidayMap.toMap()) },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
             ) {
                 Text("Save Holidays", color = Color.White)
@@ -729,6 +752,68 @@ fun ManageHolidayDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+
+    // Instant Pop-up for entering Holiday Name
+    editingDay?.let { day ->
+        var nameInput by remember { mutableStateOf(holidayMap[day] ?: "") }
+
+        AlertDialog(
+            onDismissRequest = { editingDay = null },
+            title = {
+                Text(
+                    text = "Holiday Name (Day $day)",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Enter the name of this holiday:",
+                        fontSize = 12.sp,
+                        color = Color.DarkGray
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = nameInput,
+                        onValueChange = { nameInput = it },
+                        placeholder = { Text("e.g. Diwali, Independence Day") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val finalName = nameInput.trim().ifBlank { "Holiday" }
+                        holidayMap[day] = finalName
+                        editingDay = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
+                ) {
+                    Text("Set", color = Color.White)
+                }
+            },
+            dismissButton = {
+                Row {
+                    if (holidayMap.containsKey(day)) {
+                        TextButton(
+                            onClick = {
+                                holidayMap.remove(day)
+                                editingDay = null
+                            }
+                        ) {
+                            Text("Remove", color = Color.Red)
+                        }
+                    }
+                    TextButton(onClick = { editingDay = null }) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -738,7 +823,6 @@ fun EditAttendanceDialog(
     onSave: (DayAttendance) -> Unit
 ) {
     var workStatus by remember { mutableStateOf(day.workStatus) }
-    var isHoliday by remember { mutableStateOf(day.isHoliday) }
     var dabbaStatus by remember {
         mutableStateOf(
             if (day.workStatus == AttendanceStatus.ABSENT || day.workStatus == AttendanceStatus.HALF_DAY) {
@@ -756,26 +840,50 @@ fun EditAttendanceDialog(
         title = { Text("Edit Day: ${day.dateString}") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                // Holiday Checkbox
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { isHoliday = !isHoliday },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = isHoliday,
-                        onCheckedChange = { isHoliday = it },
-                        colors = CheckboxDefaults.colors(checkedColor = Color(0xFFFF9800))
-                    )
-                    Text(
-                        text = "Mark this day as Holiday",
-                        fontWeight = FontWeight.Bold,
-                        color = if (isHoliday) Color(0xFFE65100) else Color.Unspecified
-                    )
+                // Show Holiday Name Badge instead of Checkbox
+                if (day.isHoliday) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFFFE0B2),
+                        border = BorderStroke(1.dp, Color(0xFFFF9800)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "🎉 Holiday: ",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color(0xFFE65100)
+                            )
+                            Text(
+                                text = day.holidayName.ifBlank { "Holiday" },
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color(0xFFBF360C)
+                            )
+                        }
+                    }
+                } else {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFF5F5F5),
+                        border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Regular Working Day",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.DarkGray,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
+                    }
                 }
 
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Text("Work Attendance:", fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -849,7 +957,6 @@ fun EditAttendanceDialog(
                     day.copy(
                         workStatus = workStatus,
                         dabbaStatus = finalDabba,
-                        isHoliday = isHoliday,
                         isManual = true
                     )
                 )
