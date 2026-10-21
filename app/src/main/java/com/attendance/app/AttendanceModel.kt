@@ -22,7 +22,8 @@ data class DayAttendance(
     var workStatus: AttendanceStatus = AttendanceStatus.NOT_MARKED,
     var dabbaStatus: DabbaStatus = DabbaStatus.NOT_MARKED,
     var isManual: Boolean = false,
-    var isHoliday: Boolean = false
+    var isHoliday: Boolean = false,
+    var holidayName: String = ""
 )
 
 data class SalarySettings(
