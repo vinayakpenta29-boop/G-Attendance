@@ -30,7 +30,7 @@ import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
 
-// --- Compatibility Extensions (Prevents Unresolved Reference Errors) ---
+// --- Compatibility Extensions ---
 private val DayAttendance.safeWorkStatus: AttendanceStatus
     get() = this.workStatus ?: AttendanceStatus.NOT_MARKED
 
@@ -39,6 +39,9 @@ private val DayAttendance.safeDabbaStatus: DabbaStatus
 
 private val DayAttendance.safeHolidayName: String
     get() = if (this.holidayName.isNullOrBlank()) "Holiday" else this.holidayName!!
+
+private val DayAttendance.safeAmavasyaName: String
+    get() = if (this.amavasyaName.isNullOrBlank()) "Amavasya" else this.amavasyaName!!
 
 // --- Premium Design System Colors ---
 private val SlateBg = Color(0xFFF8FAFC)
@@ -56,6 +59,7 @@ private val DangerRed = Color(0xFFEF4444) // Rose 500
 private val DangerBg = Color(0xFFFEF2F2)
 private val WarningAmber = Color(0xFFF59E0B) // Amber 500
 private val WarningBg = Color(0xFFFFFBEB)
+private val AmavasyaPurple = Color(0xFF7E22CE) // Purple 700
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +75,7 @@ fun AttendanceScreen(
     var selectedDayForEdit by remember { mutableStateOf<DayAttendance?>(null) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showHolidayDialog by remember { mutableStateOf(false) }
+    var showAmavasyaDialog by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
 
     val isLocationSet = settings.workLatitude != 0.0 && settings.workLongitude != 0.0
@@ -131,10 +136,17 @@ fun AttendanceScreen(
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Add / Manage Holidays", fontWeight = FontWeight.Medium) },
+                            text = { Text("Add Holiday", fontWeight = FontWeight.Medium) },
                             onClick = {
                                 menuExpanded = false
                                 showHolidayDialog = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Add Amavasya", fontWeight = FontWeight.Medium) },
+                            onClick = {
+                                menuExpanded = false
+                                showAmavasyaDialog = true
                             }
                         )
                         DropdownMenuItem(
@@ -185,7 +197,7 @@ fun AttendanceScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // 4. Metric Dashboard (Summary of Attendance & Dabba)
+            // 4. Metric Dashboard (Summary of Attendance, Holidays & Amavasya)
             ModernSummaryDashboard(
                 currentMonth = displayedMonth,
                 attendanceMap = attendanceMap
@@ -235,6 +247,33 @@ fun AttendanceScreen(
                     }
                 }
                 showHolidayDialog = false
+            }
+        )
+    }
+
+    // Manage Amavasya Dialog
+    if (showAmavasyaDialog) {
+        ManageAmavasyaDialog(
+            displayedMonth = displayedMonth,
+            attendanceMap = attendanceMap,
+            onDismiss = { showAmavasyaDialog = false },
+            onSaveAmavasya = { amavasyaMap ->
+                val daysInMonth = displayedMonth.lengthOfMonth()
+                for (day in 1..daysInMonth) {
+                    val dateStr = displayedMonth.atDay(day).toString()
+                    val existing = attendanceMap[dateStr] ?: DayAttendance(dateString = dateStr, dayOfMonth = day)
+                    val aName = amavasyaMap[day]
+                    val isAmavasya = aName != null
+                    if (existing.isAmavasya != isAmavasya || existing.safeAmavasyaName != (aName ?: "")) {
+                        onUpdateDay(
+                            existing.copy(
+                                isAmavasya = isAmavasya,
+                                amavasyaName = aName ?: ""
+                            )
+                        )
+                    }
+                }
+                showAmavasyaDialog = false
             }
         )
     }
@@ -459,6 +498,7 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
         day.safeWorkStatus == AttendanceStatus.HALF_DAY -> Pair(Color(0xFFFFFBEB), Color(0xFFFDE68A))
         day.safeWorkStatus == AttendanceStatus.ABSENT -> Pair(Color(0xFFFEF2F2), Color(0xFFFECACA))
         day.isHoliday -> Pair(Color(0xFFFFF7ED), Color(0xFFFED7AA))
+        day.isAmavasya -> Pair(Color(0xFFFAF5FF), Color(0xFFE9D5FF))
         else -> Pair(Color(0xFFFAFAFA), Color(0xFFF1F5F9))
     }
 
@@ -475,7 +515,7 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
                 .padding(vertical = 4.dp, horizontal = 1.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Badge for Today or Holiday
+            // Badges: Today, Holiday, or Amavasya
             if (isToday) {
                 Text(
                     text = "TODAY",
@@ -491,6 +531,14 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
                     color = Color(0xFFEA580C),
                     maxLines = 1
                 )
+            } else if (day.isAmavasya) {
+                Text(
+                    text = "AMAVASYA",
+                    fontSize = 5.2.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = AmavasyaPurple,
+                    maxLines = 1
+                )
             } else {
                 Spacer(modifier = Modifier.height(9.dp))
             }
@@ -499,8 +547,12 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
             Text(
                 text = "${day.dayOfMonth}",
                 fontSize = 12.sp,
-                fontWeight = if (isToday || day.isHoliday) FontWeight.ExtraBold else FontWeight.SemiBold,
-                color = if (isToday) BrandPrimary else TextPrimary
+                fontWeight = if (isToday || day.isHoliday || day.isAmavasya) FontWeight.ExtraBold else FontWeight.SemiBold,
+                color = when {
+                    isToday -> BrandPrimary
+                    day.isAmavasya -> AmavasyaPurple
+                    else -> TextPrimary
+                }
             )
 
             Spacer(modifier = Modifier.height(2.dp))
@@ -544,7 +596,6 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
     }
 }
 
-
 @Composable
 fun ModernSummaryDashboard(
     currentMonth: YearMonth,
@@ -564,6 +615,7 @@ fun ModernSummaryDashboard(
     val absentDays = records.filter { it.safeWorkStatus == AttendanceStatus.ABSENT }
     val halfDays = records.filter { it.safeWorkStatus == AttendanceStatus.HALF_DAY }
     val holidayDays = records.filter { it.isHoliday }
+    val amavasyaDays = records.filter { it.isAmavasya }
     val totalLeaves = absentDays.size + (halfDays.size * 0.5)
 
     val dabbaA = records.filter { it.safeDabbaStatus == DabbaStatus.ABSENT }
@@ -624,6 +676,7 @@ fun ModernSummaryDashboard(
                 )
             }
 
+            // Holidays Banner
             if (holidayDays.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Surface(
@@ -651,6 +704,40 @@ fun ModernSummaryDashboard(
                             },
                             fontSize = 11.sp,
                             color = Color(0xFF9A3412),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            // Amavasya Banner
+            if (amavasyaDays.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFFFAF5FF),
+                    border = BorderStroke(1.dp, Color(0xFFE9D5FF)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🌑", fontSize = 12.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Amavasya Marked (${amavasyaDays.size}):",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AmavasyaPurple
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = amavasyaDays.joinToString(" • ") {
+                                val name = it.safeAmavasyaName
+                                if (name != "Amavasya") "${it.dayOfMonth} ($name)" else "${it.dayOfMonth}"
+                            },
+                            fontSize = 11.sp,
+                            color = Color(0xFF6B21A8),
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -967,7 +1054,34 @@ fun EditAttendanceDialog(
                             )
                         }
                     }
-                } else {
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+
+                if (day.isAmavasya) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFFAF5FF),
+                        border = BorderStroke(1.dp, Color(0xFFE9D5FF)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("🌑", fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Amavasya: ${day.safeAmavasyaName}",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = AmavasyaPurple
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+
+                if (!day.isHoliday && !day.isAmavasya) {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
                         color = Color(0xFFF8FAFC),
@@ -1054,7 +1168,8 @@ fun EditAttendanceDialog(
                             workStatus = workStatus,
                             dabbaStatus = finalDabba,
                             isManual = true,
-                            holidayName = day.holidayName ?: ""
+                            holidayName = day.holidayName ?: "",
+                            amavasyaName = day.amavasyaName ?: ""
                         )
                     )
                 },
@@ -1211,6 +1326,164 @@ fun ManageHolidayDialog(
                         TextButton(
                             onClick = {
                                 holidayMap.remove(day)
+                                editingDay = null
+                            }
+                        ) {
+                            Text("Remove", color = DangerRed)
+                        }
+                    }
+                    TextButton(onClick = { editingDay = null }) { Text("Cancel") }
+                }
+            }
+        )
+    }
+}
+
+// Dialog for Managing Monthly Amavasya with Instant Pop-up for Name
+@Composable
+fun ManageAmavasyaDialog(
+    displayedMonth: YearMonth,
+    attendanceMap: Map<String, DayAttendance>,
+    onDismiss: () -> Unit,
+    onSaveAmavasya: (Map<Int, String>) -> Unit
+) {
+    val daysInMonth = displayedMonth.lengthOfMonth()
+
+    val amavasyaMap = remember {
+        mutableStateMapOf<Int, String>().apply {
+            for (day in 1..daysInMonth) {
+                val dateStr = displayedMonth.atDay(day).toString()
+                val record = attendanceMap[dateStr]
+                if (record?.isAmavasya == true) {
+                    put(day, record.safeAmavasyaName)
+                }
+            }
+        }
+    }
+
+    var editingDay by remember { mutableStateOf<Int?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "Manage Amavasya",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = AmavasyaPurple
+            )
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Tap a date number to set Amavasya title:",
+                    fontSize = 12.sp,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(7),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(230.dp)
+                ) {
+                    items(daysInMonth) { index ->
+                        val dayNum = index + 1
+                        val isAmavasya = amavasyaMap.containsKey(dayNum)
+
+                        Box(
+                            modifier = Modifier
+                                .padding(3.dp)
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isAmavasya) AmavasyaPurple else Color(0xFFF1F5F9))
+                                .clickable { editingDay = dayNum },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "$dayNum",
+                                fontSize = 12.sp,
+                                fontWeight = if (isAmavasya) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isAmavasya) Color.White else TextPrimary
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (amavasyaMap.isNotEmpty()) {
+                    Text(
+                        text = "Configured Amavasya (${amavasyaMap.size}):",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AmavasyaPurple
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 70.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        amavasyaMap.entries.sortedBy { it.key }.forEach { (day, name) ->
+                            Text(
+                                text = "• Day $day: $name",
+                                fontSize = 11.sp,
+                                color = Color(0xFF581C87)
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSaveAmavasya(amavasyaMap.toMap()) },
+                colors = ButtonDefaults.buttonColors(containerColor = AmavasyaPurple)
+            ) {
+                Text("Save Amavasya", color = Color.White)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+
+    // Instant Name Popup for Amavasya
+    editingDay?.let { day ->
+        var nameInput by remember { mutableStateOf(amavasyaMap[day] ?: "") }
+
+        AlertDialog(
+            onDismissRequest = { editingDay = null },
+            title = { Text("Amavasya Name (Day $day)", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = nameInput,
+                    onValueChange = { nameInput = it },
+                    placeholder = { Text("e.g. Somvati Amavasya") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val finalName = nameInput.trim().ifBlank { "Amavasya" }
+                        amavasyaMap[day] = finalName
+                        editingDay = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AmavasyaPurple)
+                ) {
+                    Text("Set", color = Color.White)
+                }
+            },
+            dismissButton = {
+                Row {
+                    if (amavasyaMap.containsKey(day)) {
+                        TextButton(
+                            onClick = {
+                                amavasyaMap.remove(day)
                                 editingDay = null
                             }
                         ) {
