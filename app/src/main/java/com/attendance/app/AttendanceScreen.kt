@@ -37,15 +37,14 @@ fun AttendanceScreen(
     onUpdateDay: (DayAttendance) -> Unit,
     onSetLocation: () -> Unit
 ) {
-    // Allows navigating backwards and forwards through months
     var displayedMonth by remember { mutableStateOf(currentMonth) }
     var selectedDayForEdit by remember { mutableStateOf<DayAttendance?>(null) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var showHolidayDialog by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
 
     val isLocationSet = settings.workLatitude != 0.0 && settings.workLongitude != 0.0
 
-    // Automatically recalculates report when displayedMonth changes
     val report = remember(displayedMonth, attendanceMap.values.toList(), settings) {
         SalaryCalculator.calculate(displayedMonth, attendanceMap, settings)
     }
@@ -75,6 +74,13 @@ fun AttendanceScreen(
                             }
                         )
                         DropdownMenuItem(
+                            text = { Text("Add Holiday") },
+                            onClick = {
+                                menuExpanded = false
+                                showHolidayDialog = true
+                            }
+                        )
+                        DropdownMenuItem(
                             text = { Text(if (isLocationSet) "Update Work GPS" else "Set Work GPS") },
                             onClick = {
                                 menuExpanded = false
@@ -93,7 +99,7 @@ fun AttendanceScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // Month Navigation Bar (Previous, Month Title, Next)
+            // Month Navigation Bar
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -106,7 +112,6 @@ fun AttendanceScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Previous Month Button
                     FilledTonalIconButton(
                         onClick = { displayedMonth = displayedMonth.minusMonths(1) },
                         modifier = Modifier.size(40.dp)
@@ -114,7 +119,6 @@ fun AttendanceScreen(
                         Text(text = "◀", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
 
-                    // Month & Year Display (Clickable to jump back to current month)
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.clickable { displayedMonth = YearMonth.now() }
@@ -135,7 +139,6 @@ fun AttendanceScreen(
                         }
                     }
 
-                    // Next Month Button
                     FilledTonalIconButton(
                         onClick = { displayedMonth = displayedMonth.plusMonths(1) },
                         modifier = Modifier.size(40.dp)
@@ -147,12 +150,11 @@ fun AttendanceScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Work Location Indicator Badge
             LocationStatusBadge(isLocationSet = isLocationSet, lat = settings.workLatitude, lng = settings.workLongitude)
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 1. Calendar View for displayedMonth
+            // 1. Calendar View
             CalendarView(
                 currentMonth = displayedMonth,
                 attendanceMap = attendanceMap,
@@ -161,7 +163,7 @@ fun AttendanceScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 2. Summary Box for displayedMonth
+            // 2. Summary Box
             AttendanceSummaryCard(
                 currentMonth = displayedMonth,
                 attendanceMap = attendanceMap
@@ -169,12 +171,12 @@ fun AttendanceScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 3. Salary Breakdown Card for displayedMonth
+            // 3. Salary Breakdown Card
             SalaryReportCard(report = report)
         }
     }
 
-    // Manual Edit Dialog with Dabba Auto-Lock
+    // Manual Edit Day Dialog
     selectedDayForEdit?.let { day ->
         EditAttendanceDialog(
             day = day,
@@ -182,6 +184,27 @@ fun AttendanceScreen(
             onSave = { updated ->
                 onUpdateDay(updated)
                 selectedDayForEdit = null
+            }
+        )
+    }
+
+    // Add / Manage Holiday Dialog
+    if (showHolidayDialog) {
+        ManageHolidayDialog(
+            displayedMonth = displayedMonth,
+            attendanceMap = attendanceMap,
+            onDismiss = { showHolidayDialog = false },
+            onSaveHolidays = { holidayDaysSet ->
+                val daysInMonth = displayedMonth.lengthOfMonth()
+                for (day in 1..daysInMonth) {
+                    val dateStr = displayedMonth.atDay(day).toString()
+                    val existing = attendanceMap[dateStr] ?: DayAttendance(dateStr, day)
+                    val isMarkedHoliday = holidayDaysSet.contains(day)
+                    if (existing.isHoliday != isMarkedHoliday) {
+                        onUpdateDay(existing.copy(isHoliday = isMarkedHoliday))
+                    }
+                }
+                showHolidayDialog = false
             }
         )
     }
@@ -296,17 +319,19 @@ fun CalendarView(
 
 @Composable
 fun DayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
-    val statusColor = when (day.workStatus) {
-        AttendanceStatus.PRESENT -> Color(0xFFC8E6C9)
-        AttendanceStatus.HALF_DAY -> Color(0xFFFFF59D)
-        AttendanceStatus.ABSENT -> Color(0xFFFFCDD2)
-        AttendanceStatus.NOT_MARKED -> Color(0xFFF9F9F9)
+    // If not marked but marked as holiday, show soft amber color
+    val statusColor = when {
+        day.workStatus == AttendanceStatus.PRESENT -> Color(0xFFC8E6C9)
+        day.workStatus == AttendanceStatus.HALF_DAY -> Color(0xFFFFF59D)
+        day.workStatus == AttendanceStatus.ABSENT -> Color(0xFFFFCDD2)
+        day.isHoliday -> Color(0xFFFFE0B2) // Warm amber holiday tint
+        else -> Color(0xFFF9F9F9)
     }
 
-    val cellBorder = if (isToday) {
-        BorderStroke(2.dp, Color(0xFF0D47A1))
-    } else {
-        BorderStroke(0.5.dp, Color.LightGray)
+    val cellBorder = when {
+        isToday -> BorderStroke(2.dp, Color(0xFF0D47A1)) // Prominent Blue border for today
+        day.isHoliday -> BorderStroke(1.5.dp, Color(0xFFFF9800)) // Amber border for holidays
+        else -> BorderStroke(0.5.dp, Color.LightGray)
     }
 
     Surface(
@@ -318,7 +343,7 @@ fun DayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
         border = cellBorder
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 3.dp, horizontal = 2.dp),
+            modifier = Modifier.padding(vertical = 2.dp, horizontal = 2.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (isToday) {
@@ -328,12 +353,24 @@ fun DayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
                     fontWeight = FontWeight.ExtraBold,
                     color = Color(0xFF0D47A1)
                 )
+            } else if (day.isHoliday) {
+                Text(
+                    text = "HOLIDAY",
+                    fontSize = 6.5.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFFE65100)
+                )
             }
+
             Text(
                 text = "${day.dayOfMonth}",
                 fontSize = 11.sp,
-                fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.Bold,
-                color = if (isToday) Color(0xFF0D47A1) else Color.Black
+                fontWeight = if (isToday || day.isHoliday) FontWeight.ExtraBold else FontWeight.Bold,
+                color = when {
+                    isToday -> Color(0xFF0D47A1)
+                    day.isHoliday -> Color(0xFFBF360C)
+                    else -> Color.Black
+                }
             )
             Text(
                 text = "W: ${day.workStatus.code}",
@@ -373,6 +410,7 @@ fun AttendanceSummaryCard(
 
     val absentDays = records.filter { it.workStatus == AttendanceStatus.ABSENT }
     val halfDays = records.filter { it.workStatus == AttendanceStatus.HALF_DAY }
+    val holidayDays = records.filter { it.isHoliday }
     val totalLeaves = absentDays.size + (halfDays.size * 0.5)
 
     val dabbaA = records.filter { it.dabbaStatus == DabbaStatus.ABSENT }
@@ -396,6 +434,7 @@ fun AttendanceSummaryCard(
             )
             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
+            // Work Attendance
             Text(text = "Work Attendance", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(modifier = Modifier.height(4.dp))
 
@@ -410,6 +449,14 @@ fun AttendanceSummaryCard(
                 dateList = if (halfDays.isEmpty()) "None" else halfDays.joinToString(", ") { "${it.dayOfMonth}" },
                 textColor = if (halfDays.isNotEmpty()) Color(0xFFE65100) else Color.DarkGray
             )
+
+            if (holidayDays.isNotEmpty()) {
+                SummaryItemRow(
+                    label = "Holidays Marked (${holidayDays.size}):",
+                    dateList = holidayDays.joinToString(", ") { "${it.dayOfMonth}" },
+                    textColor = Color(0xFFE65100)
+                )
+            }
 
             Row(
                 modifier = Modifier
@@ -428,6 +475,7 @@ fun AttendanceSummaryCard(
 
             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
+            // Dabba Section
             Text(text = "Dabba Attendance (Absents by Category)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(modifier = Modifier.height(4.dp))
 
@@ -575,6 +623,114 @@ fun SalaryRow(label: String, value: String, color: Color = Color.Unspecified, is
     }
 }
 
+// Dialog for Managing Monthly Holidays
+@Composable
+fun ManageHolidayDialog(
+    displayedMonth: YearMonth,
+    attendanceMap: Map<String, DayAttendance>,
+    onDismiss: () -> Unit,
+    onSaveHolidays: (Set<Int>) -> Unit
+) {
+    val daysInMonth = displayedMonth.lengthOfMonth()
+
+    // Pre-populate with currently saved holidays for this month
+    val selectedHolidays = remember {
+        mutableStateListOf<Int>().apply {
+            for (day in 1..daysInMonth) {
+                val dateStr = displayedMonth.atDay(day).toString()
+                if (attendanceMap[dateStr]?.isHoliday == true) {
+                    add(day)
+                }
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "Add Holidays - ${displayedMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)} ${displayedMonth.year}",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Tap date numbers to mark/unmark as holiday:",
+                    fontSize = 12.sp,
+                    color = Color.DarkGray
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Interactive 7-Column Day Grid
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(7),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(240.dp)
+                ) {
+                    items(daysInMonth) { index ->
+                        val dayNum = index + 1
+                        val isSelected = selectedHolidays.contains(dayNum)
+
+                        Box(
+                            modifier = Modifier
+                                .padding(3.dp)
+                                .size(36.dp)
+                                .background(
+                                    if (isSelected) Color(0xFFFF9800) else Color(0xFFEEEEEE),
+                                    RoundedCornerShape(6.dp)
+                                )
+                                .border(
+                                    1.dp,
+                                    if (isSelected) Color(0xFFE65100) else Color.LightGray,
+                                    RoundedCornerShape(6.dp)
+                                )
+                                .clickable {
+                                    if (isSelected) {
+                                        selectedHolidays.remove(dayNum)
+                                    } else {
+                                        selectedHolidays.add(dayNum)
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "$dayNum",
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) Color.White else Color.Black
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                val sorted = selectedHolidays.sorted()
+                Text(
+                    text = "Selected (${sorted.size}): " + if (sorted.isEmpty()) "None" else sorted.joinToString(", "),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFFE65100)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSaveHolidays(selectedHolidays.toSet()) },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
+            ) {
+                Text("Save Holidays", color = Color.White)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
 @Composable
 fun EditAttendanceDialog(
     day: DayAttendance,
@@ -582,6 +738,7 @@ fun EditAttendanceDialog(
     onSave: (DayAttendance) -> Unit
 ) {
     var workStatus by remember { mutableStateOf(day.workStatus) }
+    var isHoliday by remember { mutableStateOf(day.isHoliday) }
     var dabbaStatus by remember {
         mutableStateOf(
             if (day.workStatus == AttendanceStatus.ABSENT || day.workStatus == AttendanceStatus.HALF_DAY) {
@@ -599,6 +756,27 @@ fun EditAttendanceDialog(
         title = { Text("Edit Day: ${day.dateString}") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                // Holiday Checkbox
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { isHoliday = !isHoliday },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = isHoliday,
+                        onCheckedChange = { isHoliday = it },
+                        colors = CheckboxDefaults.colors(checkedColor = Color(0xFFFF9800))
+                    )
+                    Text(
+                        text = "Mark this day as Holiday",
+                        fontWeight = FontWeight.Bold,
+                        color = if (isHoliday) Color(0xFFE65100) else Color.Unspecified
+                    )
+                }
+
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+
                 Text("Work Attendance:", fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(AttendanceStatus.PRESENT, AttendanceStatus.HALF_DAY, AttendanceStatus.ABSENT).forEach { st ->
@@ -667,7 +845,14 @@ fun EditAttendanceDialog(
         confirmButton = {
             Button(onClick = {
                 val finalDabba = if (isWorkAbsentOrHalf) DabbaStatus.ABSENT else dabbaStatus
-                onSave(day.copy(workStatus = workStatus, dabbaStatus = finalDabba, isManual = true))
+                onSave(
+                    day.copy(
+                        workStatus = workStatus,
+                        dabbaStatus = finalDabba,
+                        isHoliday = isHoliday,
+                        isManual = true
+                    )
+                )
             }) {
                 Text("Save")
             }
