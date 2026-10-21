@@ -17,13 +17,15 @@ enum class DabbaStatus(val code: String, val isAbsent: Boolean) {
 }
 
 data class DayAttendance(
-    val dateString: String, // Format: "yyyy-MM-dd"
-    val dayOfMonth: Int,
-    var workStatus: AttendanceStatus = AttendanceStatus.NOT_MARKED,
-    var dabbaStatus: DabbaStatus = DabbaStatus.NOT_MARKED,
+    val dateString: String = "",
+    val dayOfMonth: Int = 1,
+    var workStatus: AttendanceStatus? = AttendanceStatus.NOT_MARKED,
+    var dabbaStatus: DabbaStatus? = DabbaStatus.NOT_MARKED,
     var isManual: Boolean = false,
     var isHoliday: Boolean = false,
-    var holidayName: String = ""
+    var holidayName: String? = "",
+    var isAmavasya: Boolean = false,
+    var amavasyaName: String? = ""
 )
 
 data class SalarySettings(
