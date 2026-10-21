@@ -30,6 +30,16 @@ import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
 
+// --- Compatibility Extensions (Prevents Unresolved Reference Errors) ---
+private val DayAttendance.safeWorkStatus: AttendanceStatus
+    get() = this.workStatus ?: AttendanceStatus.NOT_MARKED
+
+private val DayAttendance.safeDabbaStatus: DabbaStatus
+    get() = this.dabbaStatus ?: DabbaStatus.NOT_MARKED
+
+private val DayAttendance.safeHolidayName: String
+    get() = if (this.holidayName.isNullOrBlank()) "Holiday" else this.holidayName!!
+
 // --- Premium Design System Colors ---
 private val SlateBg = Color(0xFFF8FAFC)
 private val CardBg = Color(0xFFFFFFFF)
@@ -394,7 +404,6 @@ fun ModernCalendarCard(
         shadowElevation = 2.dp
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // Day of Week Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -412,7 +421,6 @@ fun ModernCalendarCard(
                 }
             }
 
-            // Grid Cells
             LazyVerticalGrid(
                 columns = GridCells.Fixed(7),
                 modifier = Modifier.height(330.dp),
@@ -445,7 +453,6 @@ fun ModernCalendarCard(
 
 @Composable
 fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
-    // Dynamic soft backgrounds
     val (bgColor, borderColor) = when {
         isToday -> Pair(Color(0xFFEEF2FF), BrandPrimary)
         day.safeWorkStatus == AttendanceStatus.PRESENT -> Pair(Color(0xFFF0FDF4), Color(0xFFBBF7D0))
@@ -464,11 +471,9 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
         border = BorderStroke(if (isToday) 1.8.dp else 1.dp, borderColor)
     ) {
         Column(
-            modifier = Modifier
-                .padding(vertical = 4.dp, horizontal = 2.dp),
+            modifier = Modifier.padding(vertical = 4.dp, horizontal = 2.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Badge for Today or Holiday
             if (isToday) {
                 Text(
                     text = "TODAY",
@@ -487,7 +492,6 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
                 Spacer(modifier = Modifier.height(9.dp))
             }
 
-            // Day Number
             Text(
                 text = "${day.dayOfMonth}",
                 fontSize = 12.sp,
@@ -497,7 +501,6 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
 
             Spacer(modifier = Modifier.height(2.dp))
 
-            // Work Attendance Badge
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(3.dp))
@@ -521,7 +524,6 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
 
             Spacer(modifier = Modifier.height(2.dp))
 
-            // Dabba Status Tag
             Text(
                 text = "D: ${day.safeDabbaStatus.code}",
                 fontSize = 8.5.sp,
@@ -585,7 +587,6 @@ fun ModernSummaryDashboard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Work Attendance KPI Grid (3 Columns)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -616,7 +617,6 @@ fun ModernSummaryDashboard(
                 )
             }
 
-            // Holidays Section
             if (holidayDays.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Surface(
@@ -654,7 +654,6 @@ fun ModernSummaryDashboard(
             Divider(color = CardBorder, thickness = 1.dp)
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Dabba Attendance Breakdown
             Text(
                 text = "Dabba Absents by Category (₹900/mo)",
                 fontSize = 13.sp,
@@ -663,7 +662,6 @@ fun ModernSummaryDashboard(
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 4 Mini Badges for A, G, D, L
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -766,7 +764,6 @@ fun ModernSalaryInvoiceCard(report: SalaryReport) {
         shadowElevation = 3.dp
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
-            // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -795,7 +792,6 @@ fun ModernSalaryInvoiceCard(report: SalaryReport) {
             Divider(color = CardBorder, thickness = 1.dp)
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Earnings Rows
             InvoiceRow("Net Monthly Salary", "₹%.2f".format(report.netMonthlySalary))
             InvoiceRow("Per Day Salary Rate", "₹%.2f".format(report.perDaySalary), isSub = true)
             InvoiceRow("Leaves Taken (Free: 4)", "%.1f Days".format(report.leaveDaysTaken), isSub = true)
@@ -818,7 +814,6 @@ fun ModernSalaryInvoiceCard(report: SalaryReport) {
             Divider(color = Color(0xFFF1F5F9), thickness = 1.dp)
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Deductions Rows
             InvoiceRow("Professional Tax (PT)", "-₹%.2f".format(report.professionalTax), color = DangerRed)
 
             if (report.pfDeduction > 0) {
@@ -832,7 +827,6 @@ fun ModernSalaryInvoiceCard(report: SalaryReport) {
             Divider(color = CardBorder, thickness = 1.dp)
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Total Deductions Summary
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -844,7 +838,6 @@ fun ModernSalaryInvoiceCard(report: SalaryReport) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // --- EXECUTIVE LUXURY GRAND TOTAL CARD ---
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -853,9 +846,9 @@ fun ModernSalaryInvoiceCard(report: SalaryReport) {
                     .background(
                         Brush.linearGradient(
                             listOf(
-                                Color(0xFF064E3B), // Deep Forest Green
-                                Color(0xFF047857), // Rich Emerald
-                                Color(0xFF059669)  // Vibrant Mint-Emerald
+                                Color(0xFF064E3B),
+                                Color(0xFF047857),
+                                Color(0xFF059669)
                             )
                         )
                     )
@@ -867,7 +860,7 @@ fun ModernSalaryInvoiceCard(report: SalaryReport) {
                         text = "GRAND TOTAL NET PAYOUT",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFFA7F3D0), // Soft Mint
+                        color = Color(0xFFA7F3D0),
                         letterSpacing = 1.2.sp
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -922,9 +915,9 @@ fun EditAttendanceDialog(
     onDismiss: () -> Unit,
     onSave: (DayAttendance) -> Unit
 ) {
-    var workStatus by remember { mutableStateOf(day.safeWorkStatus) }
+    var workStatus by remember { mutableStateOf<AttendanceStatus>(day.safeWorkStatus) }
     var dabbaStatus by remember {
-        mutableStateOf(
+        mutableStateOf<DabbaStatus>(
             if (day.safeWorkStatus == AttendanceStatus.ABSENT || day.safeWorkStatus == AttendanceStatus.HALF_DAY) {
                 DabbaStatus.ABSENT
             } else {
