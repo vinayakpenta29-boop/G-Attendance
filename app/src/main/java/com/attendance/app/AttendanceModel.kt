@@ -21,7 +21,8 @@ data class DayAttendance(
     val dayOfMonth: Int,
     var workStatus: AttendanceStatus = AttendanceStatus.NOT_MARKED,
     var dabbaStatus: DabbaStatus = DabbaStatus.NOT_MARKED,
-    var isManual: Boolean = false
+    var isManual: Boolean = false,
+    var isHoliday: Boolean = false
 )
 
 data class SalarySettings(
