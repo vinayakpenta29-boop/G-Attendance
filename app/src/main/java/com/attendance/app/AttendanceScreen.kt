@@ -222,7 +222,7 @@ fun AttendanceScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // 5. NEW: Sales, Incentive & Scheme Hub
+            // 5. Sales, Incentive & Scheme Hub
             ModernSalesIncentiveCard(
                 currentMonth = displayedMonth,
                 attendanceMap = attendanceMap
@@ -237,7 +237,7 @@ fun AttendanceScreen(
         }
     }
 
-    // Manual Edit Day Dialog (Includes Sales Input)
+    // Manual Edit Day Dialog
     selectedDayForEdit?.let { day ->
         EditAttendanceDialog(
             day = day,
@@ -326,7 +326,7 @@ fun AttendanceScreen(
 }
 
 // -------------------------------------------------------------
-// NEW: SALES, INCENTIVE & SCHEME COMPONENT
+// SALES, INCENTIVE & SCHEME COMPONENT
 // -------------------------------------------------------------
 
 @Composable
@@ -336,21 +336,15 @@ fun ModernSalesIncentiveCard(
 ) {
     val daysInMonth = currentMonth.lengthOfMonth()
 
-    // Retrieve records
     val records = (1..daysInMonth).map { day ->
         val dateStr = currentMonth.atDay(day).toString()
         attendanceMap[dateStr] ?: DayAttendance(dateString = dateStr, dayOfMonth = day)
     }
 
-    // 1. Total Monthly Sales
     val totalSales = records.sumOf { it.salesAmount }
-
-    // 2. Incentive = (Total Sales - 5% GST) * 1%
     val salesAfterGst = totalSales * 0.95
     val incentiveAmount = salesAfterGst * 0.01
 
-    // 3. Scheme Eligibility Evaluation
-    // Rule A: Total leaves <= 3
     var absentDays = 0
     var halfDays = 0
     val weekendOrHolidayLeaveDates = mutableListOf<String>()
@@ -382,13 +376,9 @@ fun ModernSalesIncentiveCard(
     val isLeavesWithinLimit = totalLeavesTaken <= 3.0
     val hasNoWeekendHolidayLeaves = weekendOrHolidayLeaveDates.isEmpty()
 
-    // Qualified only if leaves <= 3 AND no leaves on Sat/Sun/Holiday
     val isSchemeEligible = isLeavesWithinLimit && hasNoWeekendHolidayLeaves
-
-    // Potential Scheme Amount = Incentive / 2
     val potentialSchemeAmount = incentiveAmount / 2.0
 
-    // Toggle button for previewing scheme when disqualified
     var previewSchemeOverride by remember { mutableStateOf(false) }
 
     val effectiveSchemeAmount = if (isSchemeEligible) {
@@ -400,7 +390,6 @@ fun ModernSalesIncentiveCard(
     }
 
     val grandTotalIncentive = incentiveAmount + effectiveSchemeAmount
-
     var showSalesList by remember { mutableStateOf(false) }
 
     Surface(
@@ -411,7 +400,6 @@ fun ModernSalesIncentiveCard(
         shadowElevation = 3.dp
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
-            // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -438,7 +426,6 @@ fun ModernSalesIncentiveCard(
                 }
             }
 
-            // Expandable Day-wise Sales Table
             if (showSalesList) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Surface(
@@ -479,7 +466,6 @@ fun ModernSalesIncentiveCard(
             Divider(color = CardBorder, thickness = 1.dp)
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Sales Calculation Rows
             InvoiceRow("Total Monthly Sales", "₹%.2f".format(totalSales))
             InvoiceRow("Sales After 5% GST (95%)", "₹%.2f".format(salesAfterGst), isSub = true)
             InvoiceRow("Incentive Earned (1%)", "₹%.2f".format(incentiveAmount), color = SuccessGreen)
@@ -488,7 +474,6 @@ fun ModernSalesIncentiveCard(
             Divider(color = Color(0xFFF1F5F9), thickness = 1.dp)
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Scheme Section
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -520,7 +505,6 @@ fun ModernSalesIncentiveCard(
                 )
             }
 
-            // What-If Toggle (Only displayed when out of scheme)
             if (!isSchemeEligible) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Surface(
@@ -554,7 +538,6 @@ fun ModernSalesIncentiveCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Grand Total (Incentive + Scheme) Box
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -563,9 +546,9 @@ fun ModernSalesIncentiveCard(
                     .background(
                         Brush.linearGradient(
                             listOf(
-                                Color(0xFF1E1B4B), // Indigo 950
-                                Color(0xFF312E81), // Indigo 900
-                                Color(0xFF4338CA)  // Indigo 700
+                                Color(0xFF1E1B4B),
+                                Color(0xFF312E81),
+                                Color(0xFF4338CA)
                             )
                         )
                     )
@@ -817,7 +800,6 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
                 .padding(vertical = 4.dp, horizontal = 1.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Badges: Today, Holiday, or Amavasya
             if (isToday) {
                 Text(
                     text = "TODAY",
@@ -845,7 +827,6 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
                 Spacer(modifier = Modifier.height(9.dp))
             }
 
-            // Day Number
             Text(
                 text = "${day.dayOfMonth}",
                 fontSize = 12.sp,
@@ -859,7 +840,6 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
 
             Spacer(modifier = Modifier.height(2.dp))
 
-            // Work Attendance Badge
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(3.dp))
@@ -883,7 +863,6 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
 
             Spacer(modifier = Modifier.height(2.dp))
 
-            // Dabba Status Tag
             Text(
                 text = "D: ${day.safeDabbaStatus.code}",
                 fontSize = 8.5.sp,
@@ -978,7 +957,6 @@ fun ModernSummaryDashboard(
                 )
             }
 
-            // Holidays Banner
             if (holidayDays.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Surface(
@@ -1012,7 +990,6 @@ fun ModernSummaryDashboard(
                 }
             }
 
-            // Amavasya Banner
             if (amavasyaDays.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Surface(
@@ -1529,6 +1506,15 @@ fun EditAttendanceDialog(
     onDismiss: () -> Unit,
     onSave: (DayAttendance) -> Unit
 ) {
+    // Check if the selected date is in the future (tomorrow onwards)
+    val isFutureDate = remember(day.dateString) {
+        try {
+            LocalDate.parse(day.dateString).isAfter(LocalDate.now())
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     var workStatus by remember { mutableStateOf<AttendanceStatus>(day.safeWorkStatus) }
     var dabbaStatus by remember {
         mutableStateOf<DabbaStatus>(
@@ -1539,7 +1525,6 @@ fun EditAttendanceDialog(
             }
         )
     }
-    // Sales Input State
     var salesInput by remember { mutableStateOf(if (day.salesAmount > 0) day.salesAmount.toString() else "") }
 
     val isWorkAbsentOrHalf = workStatus == AttendanceStatus.ABSENT || workStatus == AttendanceStatus.HALF_DAY
@@ -1548,13 +1533,40 @@ fun EditAttendanceDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                "Edit Record: ${day.dateString}",
+                text = if (isFutureDate) "Day Details: ${day.dateString}" else "Edit Record: ${day.dateString}",
                 fontWeight = FontWeight.Bold,
                 fontSize = 18.sp
             )
         },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                // Future Date Lock Banner
+                if (isFutureDate) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFF1F5F9),
+                        border = BorderStroke(1.dp, CardBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("🔒", fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Future Date: Attendance and sales can only be added on or after this date.",
+                                fontSize = 11.5.sp,
+                                color = TextSecondary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
+                // Day Status Display (Holiday, Amavasya, or Normal Day)
                 if (day.isHoliday) {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
@@ -1603,19 +1615,50 @@ fun EditAttendanceDialog(
                     Spacer(modifier = Modifier.height(6.dp))
                 }
 
+                if (!day.isHoliday && !day.isAmavasya) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFF8FAFC),
+                        border = BorderStroke(1.dp, CardBorder),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("📅", fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Normal Working Day",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
                 // Daily Sales Input Field
                 OutlinedTextField(
                     value = salesInput,
-                    onValueChange = { salesInput = it },
+                    onValueChange = { if (!isFutureDate) salesInput = it },
                     label = { Text("Daily Sales Amount (₹)") },
-                    placeholder = { Text("e.g. 5000") },
+                    placeholder = { Text(if (isFutureDate) "Locked" else "e.g. 5000") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
+                    enabled = !isFutureDate,
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
-                Text("Work Attendance", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TextPrimary)
+                Text(
+                    text = if (isFutureDate) "Work Attendance (Locked)" else "Work Attendance",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = if (isFutureDate) TextSecondary else TextPrimary
+                )
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1623,20 +1666,28 @@ fun EditAttendanceDialog(
                         FilterChip(
                             selected = workStatus == st,
                             onClick = {
-                                workStatus = st
-                                if (st == AttendanceStatus.ABSENT || st == AttendanceStatus.HALF_DAY) {
-                                    dabbaStatus = DabbaStatus.ABSENT
+                                if (!isFutureDate) {
+                                    workStatus = st
+                                    if (st == AttendanceStatus.ABSENT || st == AttendanceStatus.HALF_DAY) {
+                                        dabbaStatus = DabbaStatus.ABSENT
+                                    }
                                 }
                             },
+                            enabled = !isFutureDate,
                             label = { Text(st.code, fontWeight = FontWeight.Bold) }
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("Dabba Allowance", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TextPrimary)
+                Text(
+                    text = if (isFutureDate) "Dabba Allowance (Locked)" else "Dabba Allowance",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = if (isFutureDate) TextSecondary else TextPrimary
+                )
 
-                if (isWorkAbsentOrHalf) {
+                if (isWorkAbsentOrHalf && !isFutureDate) {
                     Text(
                         text = "Work is '${workStatus.code}' → Dabba auto-locked to Absent",
                         fontSize = 11.sp,
@@ -1659,7 +1710,7 @@ fun EditAttendanceDialog(
                         DabbaStatus.L,
                         DabbaStatus.NOT_MARKED
                     ).forEach { st ->
-                        val isEnabled = !isWorkAbsentOrHalf || st == DabbaStatus.ABSENT
+                        val isEnabled = !isFutureDate && (!isWorkAbsentOrHalf || st == DabbaStatus.ABSENT)
 
                         FilterChip(
                             selected = dabbaStatus == st,
@@ -1676,28 +1727,39 @@ fun EditAttendanceDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    val finalDabba = if (isWorkAbsentOrHalf) DabbaStatus.ABSENT else dabbaStatus
-                    val enteredSales = salesInput.toDoubleOrNull() ?: 0.0
-                    onSave(
-                        day.copy(
-                            workStatus = workStatus,
-                            dabbaStatus = finalDabba,
-                            isManual = true,
-                            holidayName = day.holidayName ?: "",
-                            amavasyaName = day.amavasyaName ?: "",
-                            salesAmount = enteredSales
+            if (!isFutureDate) {
+                Button(
+                    onClick = {
+                        val finalDabba = if (isWorkAbsentOrHalf) DabbaStatus.ABSENT else dabbaStatus
+                        val enteredSales = salesInput.toDoubleOrNull() ?: 0.0
+                        onSave(
+                            day.copy(
+                                workStatus = workStatus,
+                                dabbaStatus = finalDabba,
+                                isManual = true,
+                                holidayName = day.holidayName ?: "",
+                                amavasyaName = day.amavasyaName ?: "",
+                                salesAmount = enteredSales
+                            )
                         )
-                    )
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = BrandPrimary)
-            ) {
-                Text("Save Changes")
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandPrimary)
+                ) {
+                    Text("Save Changes")
+                }
+            } else {
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64748B))
+                ) {
+                    Text("Close")
+                }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            if (!isFutureDate) {
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
         }
     )
 }
