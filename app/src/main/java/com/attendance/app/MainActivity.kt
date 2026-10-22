@@ -59,7 +59,6 @@ class MainActivity : ComponentActivity() {
                     saveSettings()
                 },
                 onUpdateDay = { day ->
-                    // Enforce Dabba Absent if work status is A or H
                     val finalDay = if (day.workStatus == AttendanceStatus.ABSENT || day.workStatus == AttendanceStatus.HALF_DAY) {
                         day.copy(dabbaStatus = DabbaStatus.ABSENT)
                     } else {
@@ -79,37 +78,45 @@ class MainActivity : ComponentActivity() {
         autoFinalizePostWorkHourAttendance()
     }
 
-    // Instantly checks and marks attendance if opened after 9:00 PM
     private fun autoFinalizePostWorkHourAttendance() {
-        val now = LocalTime.now()
-        val today = LocalDate.now().toString()
-        val dayNum = LocalDate.now().dayOfMonth
+        try {
+            val now = LocalTime.now()
+            val today = LocalDate.now().toString()
+            val dayNum = LocalDate.now().dayOfMonth
 
-        if (now.isAfter(LocalTime.of(21, 0))) {
-            val trackerPrefs = getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
-            val wasInFirstHalf = trackerPrefs.getBoolean("${today}_h1", false)
-            val wasInSecondHalf = trackerPrefs.getBoolean("${today}_h2", false)
+            if (now.isAfter(LocalTime.of(21, 0))) {
+                val trackerPrefs = getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
+                val wasInFirstHalf = trackerPrefs.getBoolean("${today}_h1", false)
+                val wasInSecondHalf = trackerPrefs.getBoolean("${today}_h2", false)
 
-            val currentRecord = attendanceMap[today] ?: DayAttendance(dateString = today, dayOfMonth = dayNum)
+                val currentRecord = attendanceMap[today] ?: DayAttendance(dateString = today, dayOfMonth = dayNum)
 
-            if (!currentRecord.isManual && currentRecord.workStatus == AttendanceStatus.NOT_MARKED) {
-                val finalStatus = when {
-                    wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
-                    wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY
-                    else -> AttendanceStatus.ABSENT
+                if (!currentRecord.isManual && currentRecord.workStatus == AttendanceStatus.NOT_MARKED) {
+                    val finalStatus = when {
+                        wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
+                        wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY
+                        else -> AttendanceStatus.ABSENT
+                    }
+
+                    val finalDabba = if (finalStatus == AttendanceStatus.ABSENT || finalStatus == AttendanceStatus.HALF_DAY) {
+                        DabbaStatus.ABSENT
+                    } else {
+                        currentRecord.dabbaStatus
+                    }
+
+                    val updatedRecord = currentRecord.copy(
+                        workStatus = finalStatus,
+                        dabbaStatus = finalDabba,
+                        holidayName = currentRecord.holidayName ?: "",
+                        amavasyaName = currentRecord.amavasyaName ?: "",
+                        salesAmount = currentRecord.salesAmount
+                    )
+                    attendanceMap[today] = updatedRecord
+                    saveAttendance()
                 }
-
-                // Auto-set Dabba to A if Absent or Half-day
-                val finalDabba = if (finalStatus == AttendanceStatus.ABSENT || finalStatus == AttendanceStatus.HALF_DAY) {
-                    DabbaStatus.ABSENT
-                } else {
-                    currentRecord.dabbaStatus
-                }
-
-                val updatedRecord = currentRecord.copy(workStatus = finalStatus, dabbaStatus = finalDabba)
-                attendanceMap[today] = updatedRecord
-                saveAttendance()
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -160,38 +167,77 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadData() {
-        val sp = getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
-        val json = sp.getString("records", null)
-        if (!json.isNullOrEmpty()) {
-            val type = object : TypeToken<Map<String, DayAttendance>>() {}.type
-            val map: Map<String, DayAttendance> = gson.fromJson(json, type)
+        try {
+            val sp = getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
+            val json = sp.getString("records", null)
+            if (!json.isNullOrEmpty()) {
+                val type = object : TypeToken<Map<String, DayAttendance>>() {}.type
+                val map: Map<String, DayAttendance>? = gson.fromJson(json, type)
 
-            // Auto-correct any existing records where work was A or H to have Dabba A
-            val sanitized = map.mapValues { (_, day) ->
-                if ((day.workStatus == AttendanceStatus.ABSENT || day.workStatus == AttendanceStatus.HALF_DAY) && day.dabbaStatus != DabbaStatus.ABSENT) {
-                    day.copy(dabbaStatus = DabbaStatus.ABSENT)
-                } else {
-                    day
+                if (map != null) {
+                    val sanitized = mutableMapOf<String, DayAttendance>()
+                    for ((key, raw) in map) {
+                        val workSt = raw.workStatus ?: AttendanceStatus.NOT_MARKED
+                        val dabbaSt = raw.dabbaStatus ?: DabbaStatus.NOT_MARKED
+
+                        val finalDabba = if ((workSt == AttendanceStatus.ABSENT || workSt == AttendanceStatus.HALF_DAY) && dabbaSt != DabbaStatus.ABSENT) {
+                            DabbaStatus.ABSENT
+                        } else {
+                            dabbaSt
+                        }
+
+                        sanitized[key] = DayAttendance(
+                            dateString = if (raw.dateString.isBlank()) key else raw.dateString,
+                            dayOfMonth = if (raw.dayOfMonth <= 0) 1 else raw.dayOfMonth,
+                            workStatus = workSt,
+                            dabbaStatus = finalDabba,
+                            isManual = raw.isManual,
+                            isHoliday = raw.isHoliday,
+                            holidayName = raw.holidayName ?: "",
+                            isAmavasya = raw.isAmavasya,
+                            amavasyaName = raw.amavasyaName ?: "",
+                            salesAmount = raw.salesAmount
+                        )
+                    }
+
+                    attendanceMap.clear()
+                    attendanceMap.putAll(sanitized)
                 }
             }
-
-            attendanceMap.clear()
-            attendanceMap.putAll(sanitized)
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
 
-        val setJson = sp.getString("settings", null)
-        if (!setJson.isNullOrEmpty()) {
-            settings = gson.fromJson(setJson, SalarySettings::class.java)
+        try {
+            val sp = getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
+            val setJson = sp.getString("settings", null)
+            if (!setJson.isNullOrEmpty()) {
+                val loadedSettings: SalarySettings? = gson.fromJson(setJson, SalarySettings::class.java)
+                if (loadedSettings != null) {
+                    settings = loadedSettings
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            settings = SalarySettings()
         }
     }
 
     private fun saveAttendance() {
-        val sp = getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
-        sp.edit().putString("records", gson.toJson(attendanceMap)).apply()
+        try {
+            val sp = getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
+            sp.edit().putString("records", gson.toJson(attendanceMap)).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun saveSettings() {
-        val sp = getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
-        sp.edit().putString("settings", gson.toJson(settings)).apply()
+        try {
+            val sp = getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
+            sp.edit().putString("settings", gson.toJson(settings)).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }
