@@ -19,7 +19,6 @@ import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
 
-// Data model for Monthly Leaves Breakdown
 data class MonthLeavesData(
     val monthName: String,
     val absentCount: Int,
