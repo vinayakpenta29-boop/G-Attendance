@@ -62,7 +62,6 @@ private val WarningAmber = Color(0xFFF59E0B) // Amber 500
 private val WarningBg = Color(0xFFFFFBEB)
 private val AmavasyaPurple = Color(0xFF7E22CE) // Purple 700
 
-// Model for Monthly Leaves Record in History
 private data class MonthLeavesData(
     val monthName: String,
     val absentCount: Int,
@@ -214,7 +213,7 @@ fun AttendanceScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // 4. Metric Dashboard (Attendance, Holidays & Amavasya)
+            // 4. Metric Dashboard
             ModernSummaryDashboard(
                 currentMonth = displayedMonth,
                 attendanceMap = attendanceMap
@@ -237,7 +236,7 @@ fun AttendanceScreen(
         }
     }
 
-    // Manual Edit Day Dialog
+    // Manual Edit Day Dialog with Built-In Bill Calculator
     selectedDayForEdit?.let { day ->
         EditAttendanceDialog(
             day = day,
@@ -249,7 +248,6 @@ fun AttendanceScreen(
         )
     }
 
-    // Manage Holidays Dialog
     if (showHolidayDialog) {
         ManageHolidayDialog(
             displayedMonth = displayedMonth,
@@ -276,7 +274,6 @@ fun AttendanceScreen(
         )
     }
 
-    // Manage Amavasya Dialog
     if (showAmavasyaDialog) {
         ManageAmavasyaDialog(
             displayedMonth = displayedMonth,
@@ -303,7 +300,6 @@ fun AttendanceScreen(
         )
     }
 
-    // Leaves History Dialog
     if (showLeavesHistoryDialog) {
         LeavesHistoryDialog(
             initialYear = displayedMonth.year,
@@ -312,7 +308,6 @@ fun AttendanceScreen(
         )
     }
 
-    // Salary Configuration Dialog
     if (showSettingsDialog) {
         SettingsDialog(
             initial = settings,
@@ -447,13 +442,18 @@ fun ModernSalesIncentiveCard(
                             Text("No sales logged for this month yet. Tap any date to add sales.", fontSize = 11.sp, color = TextSecondary)
                         } else {
                             salesDays.forEach { d ->
+                                val billCount = d.salesBills?.split(",")?.count { it.isNotBlank() } ?: 1
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(vertical = 2.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("Day ${d.dayOfMonth} (${currentMonth.atDay(d.dayOfMonth).dayOfWeek.name.take(3)})", fontSize = 11.sp, color = TextSecondary)
+                                    Text(
+                                        text = "Day ${d.dayOfMonth} (${currentMonth.atDay(d.dayOfMonth).dayOfWeek.name.take(3)}) • $billCount bills",
+                                        fontSize = 11.sp,
+                                        color = TextSecondary
+                                    )
                                     Text("₹%.2f".format(d.salesAmount), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                                 }
                             }
@@ -1506,7 +1506,6 @@ fun EditAttendanceDialog(
     onDismiss: () -> Unit,
     onSave: (DayAttendance) -> Unit
 ) {
-    // Check if the selected date is in the future (tomorrow onwards)
     val isFutureDate = remember(day.dateString) {
         try {
             LocalDate.parse(day.dateString).isAfter(LocalDate.now())
@@ -1525,7 +1524,24 @@ fun EditAttendanceDialog(
             }
         )
     }
-    var salesInput by remember { mutableStateOf(if (day.salesAmount > 0) day.salesAmount.toString() else "") }
+
+    // Customer Bills Calculator State
+    var billInput by remember { mutableStateOf("") }
+    val billList = remember {
+        mutableStateListOf<Double>().apply {
+            if (!day.salesBills.isNullOrBlank()) {
+                day.salesBills!!.split(",")
+                    .mapNotNull { it.trim().toDoubleOrNull() }
+                    .forEach { add(it) }
+            } else if (day.salesAmount > 0) {
+                add(day.salesAmount)
+            }
+        }
+    }
+
+    val computedTotalSales = remember(billList.toList()) {
+        billList.sum()
+    }
 
     val isWorkAbsentOrHalf = workStatus == AttendanceStatus.ABSENT || workStatus == AttendanceStatus.HALF_DAY
 
@@ -1540,7 +1556,6 @@ fun EditAttendanceDialog(
         },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                // Future Date Lock Banner
                 if (isFutureDate) {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
@@ -1557,7 +1572,7 @@ fun EditAttendanceDialog(
                             Text("🔒", fontSize = 14.sp)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Future Date: Attendance and sales can only be added on or after this date.",
+                                text = "Future Date: Attendance and bills can only be entered on or after this date.",
                                 fontSize = 11.5.sp,
                                 color = TextSecondary,
                                 fontWeight = FontWeight.Medium
@@ -1566,7 +1581,6 @@ fun EditAttendanceDialog(
                     }
                 }
 
-                // Day Status Display (Holiday, Amavasya, or Normal Day)
                 if (day.isHoliday) {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
@@ -1640,17 +1654,163 @@ fun EditAttendanceDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Daily Sales Input Field
-                OutlinedTextField(
-                    value = salesInput,
-                    onValueChange = { if (!isFutureDate) salesInput = it },
-                    label = { Text("Daily Sales Amount (₹)") },
-                    placeholder = { Text(if (isFutureDate) "Locked" else "e.g. 5000") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    enabled = !isFutureDate,
+                // --- BUILT-IN CUSTOMER BILLS CALCULATOR ---
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFF8FAFC),
+                    border = BorderStroke(1.dp, CardBorder),
                     modifier = Modifier.fillMaxWidth()
-                )
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Customer Bills & Sales Calculator",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            if (billList.isNotEmpty() && !isFutureDate) {
+                                Text(
+                                    text = "Clear All",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = DangerRed,
+                                    modifier = Modifier.clickable { billList.clear() }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Add customer bills below — auto sums without a calculator!",
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        if (!isFutureDate) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = billInput,
+                                    onValueChange = { billInput = it },
+                                    placeholder = { Text("e.g. 850 or 500+350") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                Button(
+                                    onClick = {
+                                        if (billInput.isNotBlank()) {
+                                            val parts = billInput.split("+", ",").mapNotNull { it.trim().toDoubleOrNull() }
+                                            if (parts.isNotEmpty()) {
+                                                billList.addAll(parts)
+                                                billInput = ""
+                                            }
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = BrandPrimary),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
+                                ) {
+                                    Text("+ Add", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                            }
+                        }
+
+                        if (billList.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Entered Bills (${billList.size} customers):",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextSecondary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 130.dp)
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                billList.forEachIndexed { index, amount ->
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color.White,
+                                        border = BorderStroke(1.dp, CardBorder),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "Customer #${index + 1}: ₹%.2f".format(amount),
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = TextPrimary
+                                            )
+                                            if (!isFutureDate) {
+                                                Text(
+                                                    text = "✕",
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = DangerRed,
+                                                    modifier = Modifier
+                                                        .clip(CircleShape)
+                                                        .clickable { billList.removeAt(index) }
+                                                        .padding(4.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (computedTotalSales > 0) SuccessBg else Color(0xFFF1F5F9),
+                            border = BorderStroke(1.dp, if (computedTotalSales > 0) Color(0xFFA7F3D0) else CardBorder),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Total Day Sales:",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (computedTotalSales > 0) Color(0xFF065F46) else TextSecondary
+                                )
+                                Text(
+                                    text = "₹%.2f".format(computedTotalSales),
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = if (computedTotalSales > 0) SuccessGreen else TextPrimary
+                                )
+                            }
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(
@@ -1731,7 +1891,7 @@ fun EditAttendanceDialog(
                 Button(
                     onClick = {
                         val finalDabba = if (isWorkAbsentOrHalf) DabbaStatus.ABSENT else dabbaStatus
-                        val enteredSales = salesInput.toDoubleOrNull() ?: 0.0
+                        val finalBillsString = billList.joinToString(",")
                         onSave(
                             day.copy(
                                 workStatus = workStatus,
@@ -1739,7 +1899,8 @@ fun EditAttendanceDialog(
                                 isManual = true,
                                 holidayName = day.holidayName ?: "",
                                 amavasyaName = day.amavasyaName ?: "",
-                                salesAmount = enteredSales
+                                salesAmount = computedTotalSales,
+                                salesBills = finalBillsString
                             )
                         )
                     },
