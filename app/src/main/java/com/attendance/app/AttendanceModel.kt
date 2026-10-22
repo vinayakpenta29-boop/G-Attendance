@@ -26,7 +26,8 @@ data class DayAttendance(
     var holidayName: String? = "",
     var isAmavasya: Boolean = false,
     var amavasyaName: String? = "",
-    var salesAmount: Double = 0.0
+    var salesAmount: Double = 0.0,
+    var salesBills: String? = ""
 )
 
 data class SalarySettings(
