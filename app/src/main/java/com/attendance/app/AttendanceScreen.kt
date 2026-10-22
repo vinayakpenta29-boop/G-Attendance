@@ -25,6 +25,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
@@ -213,7 +214,7 @@ fun AttendanceScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // 4. Metric Dashboard (Summary of Attendance, Holidays & Amavasya)
+            // 4. Metric Dashboard (Attendance, Holidays & Amavasya)
             ModernSummaryDashboard(
                 currentMonth = displayedMonth,
                 attendanceMap = attendanceMap
@@ -221,14 +222,22 @@ fun AttendanceScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // 5. Executive Salary Report Card
+            // 5. NEW: Sales, Incentive & Scheme Hub
+            ModernSalesIncentiveCard(
+                currentMonth = displayedMonth,
+                attendanceMap = attendanceMap
+            )
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // 6. Executive Salary Report Card
             ModernSalaryInvoiceCard(report = report)
 
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
 
-    // Manual Edit Day Dialog
+    // Manual Edit Day Dialog (Includes Sales Input)
     selectedDayForEdit?.let { day ->
         EditAttendanceDialog(
             day = day,
@@ -294,7 +303,7 @@ fun AttendanceScreen(
         )
     }
 
-    // Leaves History Dialog (Yearly & Monthly)
+    // Leaves History Dialog
     if (showLeavesHistoryDialog) {
         LeavesHistoryDialog(
             initialYear = displayedMonth.year,
@@ -313,6 +322,274 @@ fun AttendanceScreen(
                 showSettingsDialog = false
             }
         )
+    }
+}
+
+// -------------------------------------------------------------
+// NEW: SALES, INCENTIVE & SCHEME COMPONENT
+// -------------------------------------------------------------
+
+@Composable
+fun ModernSalesIncentiveCard(
+    currentMonth: YearMonth,
+    attendanceMap: Map<String, DayAttendance>
+) {
+    val daysInMonth = currentMonth.lengthOfMonth()
+
+    // Retrieve records
+    val records = (1..daysInMonth).map { day ->
+        val dateStr = currentMonth.atDay(day).toString()
+        attendanceMap[dateStr] ?: DayAttendance(dateString = dateStr, dayOfMonth = day)
+    }
+
+    // 1. Total Monthly Sales
+    val totalSales = records.sumOf { it.salesAmount }
+
+    // 2. Incentive = (Total Sales - 5% GST) * 1%
+    val salesAfterGst = totalSales * 0.95
+    val incentiveAmount = salesAfterGst * 0.01
+
+    // 3. Scheme Eligibility Evaluation
+    // Rule A: Total leaves <= 3
+    var absentDays = 0
+    var halfDays = 0
+    val weekendOrHolidayLeaveDates = mutableListOf<String>()
+
+    for (day in 1..daysInMonth) {
+        val date = currentMonth.atDay(day)
+        val r = attendanceMap[date.toString()] ?: DayAttendance(dateString = date.toString(), dayOfMonth = day)
+        val st = r.safeWorkStatus
+        val isLeaveTaken = (st == AttendanceStatus.ABSENT || st == AttendanceStatus.HALF_DAY)
+
+        if (st == AttendanceStatus.ABSENT) absentDays++
+        if (st == AttendanceStatus.HALF_DAY) halfDays++
+
+        if (isLeaveTaken) {
+            val isWeekend = (date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY)
+            val isHoliday = r.isHoliday
+            if (isWeekend || isHoliday) {
+                val reasonType = when {
+                    isHoliday -> "Holiday"
+                    date.dayOfWeek == DayOfWeek.SUNDAY -> "Sun"
+                    else -> "Sat"
+                }
+                weekendOrHolidayLeaveDates.add("$day ($reasonType)")
+            }
+        }
+    }
+
+    val totalLeavesTaken = absentDays + (halfDays * 0.5)
+    val isLeavesWithinLimit = totalLeavesTaken <= 3.0
+    val hasNoWeekendHolidayLeaves = weekendOrHolidayLeaveDates.isEmpty()
+
+    // Qualified only if leaves <= 3 AND no leaves on Sat/Sun/Holiday
+    val isSchemeEligible = isLeavesWithinLimit && hasNoWeekendHolidayLeaves
+
+    // Potential Scheme Amount = Incentive / 2
+    val potentialSchemeAmount = incentiveAmount / 2.0
+
+    // Toggle button for previewing scheme when disqualified
+    var previewSchemeOverride by remember { mutableStateOf(false) }
+
+    val effectiveSchemeAmount = if (isSchemeEligible) {
+        potentialSchemeAmount
+    } else if (previewSchemeOverride) {
+        potentialSchemeAmount
+    } else {
+        0.0
+    }
+
+    val grandTotalIncentive = incentiveAmount + effectiveSchemeAmount
+
+    var showSalesList by remember { mutableStateOf(false) }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = CardBg,
+        border = BorderStroke(1.dp, CardBorder),
+        shadowElevation = 3.dp
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("Sales & Incentive Hub", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text("Monthly turnover & commission", fontSize = 11.sp, color = TextSecondary)
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFEEF2FF),
+                    border = BorderStroke(1.dp, Color(0xFFC7D2FE)),
+                    modifier = Modifier.clickable { showSalesList = !showSalesList }
+                ) {
+                    Text(
+                        text = if (showSalesList) "Hide Details ▲" else "Day-Wise Sales ▼",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = BrandPrimary,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            // Expandable Day-wise Sales Table
+            if (showSalesList) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFFF8FAFC),
+                    border = BorderStroke(1.dp, CardBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(10.dp)
+                            .heightIn(max = 180.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Text("Day-Wise Sales Records:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        val salesDays = records.filter { it.salesAmount > 0 }
+                        if (salesDays.isEmpty()) {
+                            Text("No sales logged for this month yet. Tap any date to add sales.", fontSize = 11.sp, color = TextSecondary)
+                        } else {
+                            salesDays.forEach { d ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Day ${d.dayOfMonth} (${currentMonth.atDay(d.dayOfMonth).dayOfWeek.name.take(3)})", fontSize = 11.sp, color = TextSecondary)
+                                    Text("₹%.2f".format(d.salesAmount), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Divider(color = CardBorder, thickness = 1.dp)
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Sales Calculation Rows
+            InvoiceRow("Total Monthly Sales", "₹%.2f".format(totalSales))
+            InvoiceRow("Sales After 5% GST (95%)", "₹%.2f".format(salesAfterGst), isSub = true)
+            InvoiceRow("Incentive Earned (1%)", "₹%.2f".format(incentiveAmount), color = SuccessGreen)
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Divider(color = Color(0xFFF1F5F9), thickness = 1.dp)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Scheme Section
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("Scheme Bonus (50% of Incentive)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text(
+                        text = if (isSchemeEligible) {
+                            "Status: Eligible (Leaves: %.1f <= 3 & No Sat/Sun/Off leaves)".format(totalLeavesTaken)
+                        } else {
+                            buildString {
+                                append("Status: Disqualified")
+                                if (!isLeavesWithinLimit) append(" (Leaves: %.1f > 3)".format(totalLeavesTaken))
+                                if (weekendOrHolidayLeaveDates.isNotEmpty()) append(" (Leave on: ${weekendOrHolidayLeaveDates.joinToString(", ")})")
+                            }
+                        },
+                        fontSize = 10.5.sp,
+                        color = if (isSchemeEligible) Color(0xFF047857) else DangerRed,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                Text(
+                    text = if (isSchemeEligible || previewSchemeOverride) "+₹%.2f".format(potentialSchemeAmount) else "₹0.00",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSchemeEligible || previewSchemeOverride) SuccessGreen else Color.Gray
+                )
+            }
+
+            // What-If Toggle (Only displayed when out of scheme)
+            if (!isSchemeEligible) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = WarningBg,
+                    border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Preview Scheme Amount", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF92400E))
+                            Text("Switch ON to simulate potential earnings", fontSize = 10.sp, color = Color(0xFFB45309))
+                        }
+                        Switch(
+                            checked = previewSchemeOverride,
+                            onCheckedChange = { previewSchemeOverride = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = WarningAmber
+                            )
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Grand Total (Incentive + Scheme) Box
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(4.dp, RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                Color(0xFF1E1B4B), // Indigo 950
+                                Color(0xFF312E81), // Indigo 900
+                                Color(0xFF4338CA)  // Indigo 700
+                            )
+                        )
+                    )
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "GRAND TOTAL (INCENTIVE + SCHEME)",
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFC7D2FE),
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = "₹%.2f".format(grandTotalIncentive),
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -1028,7 +1305,6 @@ fun InvoiceRow(
 // DIALOGS: REFINED & MODERNIZED
 // -------------------------------------------------------------
 
-// Dialog for Viewing Yearly & Monthly Leaves History
 @Composable
 fun LeavesHistoryDialog(
     initialYear: Int,
@@ -1037,7 +1313,6 @@ fun LeavesHistoryDialog(
 ) {
     var selectedYear by remember { mutableStateOf(initialYear) }
 
-    // Compute leaves taken per month for the selected year
     val yearlyData = remember(selectedYear, attendanceMap.values.toList()) {
         (1..12).map { month ->
             val ym = YearMonth.of(selectedYear, month)
@@ -1072,7 +1347,6 @@ fun LeavesHistoryDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            // Year Selector in Dialog Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1085,7 +1359,6 @@ fun LeavesHistoryDialog(
                     color = TextPrimary
                 )
 
-                // Year navigation controls
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -1127,7 +1400,6 @@ fun LeavesHistoryDialog(
                     .heightIn(max = 440.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                // Total Year Summary Card
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = BrandPrimary.copy(alpha = 0.08f),
@@ -1173,7 +1445,6 @@ fun LeavesHistoryDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Monthly Rows
                 yearlyData.forEach { monthData ->
                     Surface(
                         shape = RoundedCornerShape(10.dp),
@@ -1208,7 +1479,6 @@ fun LeavesHistoryDialog(
                                 )
                             }
 
-                            // Leaves Count Pill
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
                                 color = when {
@@ -1269,6 +1539,8 @@ fun EditAttendanceDialog(
             }
         )
     }
+    // Sales Input State
+    var salesInput by remember { mutableStateOf(if (day.salesAmount > 0) day.salesAmount.toString() else "") }
 
     val isWorkAbsentOrHalf = workStatus == AttendanceStatus.ABSENT || workStatus == AttendanceStatus.HALF_DAY
 
@@ -1331,22 +1603,16 @@ fun EditAttendanceDialog(
                     Spacer(modifier = Modifier.height(6.dp))
                 }
 
-                if (!day.isHoliday && !day.isAmavasya) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFFF8FAFC),
-                        border = BorderStroke(1.dp, CardBorder),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "Regular Working Day",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = TextSecondary,
-                            modifier = Modifier.padding(10.dp)
-                        )
-                    }
-                }
+                // Daily Sales Input Field
+                OutlinedTextField(
+                    value = salesInput,
+                    onValueChange = { salesInput = it },
+                    label = { Text("Daily Sales Amount (₹)") },
+                    placeholder = { Text("e.g. 5000") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 Spacer(modifier = Modifier.height(14.dp))
                 Text("Work Attendance", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TextPrimary)
@@ -1413,13 +1679,15 @@ fun EditAttendanceDialog(
             Button(
                 onClick = {
                     val finalDabba = if (isWorkAbsentOrHalf) DabbaStatus.ABSENT else dabbaStatus
+                    val enteredSales = salesInput.toDoubleOrNull() ?: 0.0
                     onSave(
                         day.copy(
                             workStatus = workStatus,
                             dabbaStatus = finalDabba,
                             isManual = true,
                             holidayName = day.holidayName ?: "",
-                            amavasyaName = day.amavasyaName ?: ""
+                            amavasyaName = day.amavasyaName ?: "",
+                            salesAmount = enteredSales
                         )
                     )
                 },
