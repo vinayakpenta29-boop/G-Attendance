@@ -62,13 +62,6 @@ private val WarningAmber = Color(0xFFF59E0B) // Amber 500
 private val WarningBg = Color(0xFFFFFBEB)
 private val AmavasyaPurple = Color(0xFF7E22CE) // Purple 700
 
-private data class MonthLeavesData(
-    val monthName: String,
-    val absentCount: Int,
-    val halfDayCount: Int,
-    val totalLeaves: Double
-)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AttendanceScreen(
@@ -185,7 +178,6 @@ fun AttendanceScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
-            // 1. Month Navigation Header
             ModernMonthNavigator(
                 displayedMonth = displayedMonth,
                 onPreviousMonth = { displayedMonth = displayedMonth.minusMonths(1) },
@@ -195,7 +187,6 @@ fun AttendanceScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // 2. GPS Status Banner
             ModernLocationBanner(
                 isLocationSet = isLocationSet,
                 lat = settings.workLatitude,
@@ -205,7 +196,6 @@ fun AttendanceScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 3. Calendar View
             ModernCalendarCard(
                 currentMonth = displayedMonth,
                 attendanceMap = attendanceMap,
@@ -214,7 +204,6 @@ fun AttendanceScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // 4. Metric Dashboard
             ModernSummaryDashboard(
                 currentMonth = displayedMonth,
                 attendanceMap = attendanceMap
@@ -222,7 +211,6 @@ fun AttendanceScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // 5. Sales, Incentive & Scheme Hub
             ModernSalesIncentiveCard(
                 currentMonth = displayedMonth,
                 attendanceMap = attendanceMap
@@ -230,14 +218,12 @@ fun AttendanceScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // 6. Executive Salary Report Card
             ModernSalaryInvoiceCard(report = report)
 
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
 
-    // Safety Confirmation Dialog for Updating GPS
     if (showGpsConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showGpsConfirmDialog = false },
@@ -298,7 +284,6 @@ fun AttendanceScreen(
         )
     }
 
-    // Manual Edit Day Dialog
     selectedDayForEdit?.let { day ->
         EditAttendanceDialog(
             day = day,
@@ -381,10 +366,6 @@ fun AttendanceScreen(
         )
     }
 }
-
-// -------------------------------------------------------------
-// SALES, INCENTIVE & SCHEME COMPONENT
-// -------------------------------------------------------------
 
 @Composable
 fun ModernSalesIncentiveCard(
@@ -641,10 +622,6 @@ fun ModernSalesIncentiveCard(
         }
     }
 }
-
-// -------------------------------------------------------------
-// SUB-COMPONENTS: MODERN UI SYSTEM
-// -------------------------------------------------------------
 
 @Composable
 fun ModernMonthNavigator(
@@ -1344,10 +1321,6 @@ fun InvoiceRow(
     }
 }
 
-// -------------------------------------------------------------
-// DIALOGS: REFINED & MODERNIZED
-// -------------------------------------------------------------
-
 @Composable
 fun EditAttendanceDialog(
     day: DayAttendance,
@@ -1504,7 +1477,6 @@ fun EditAttendanceDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Single Daily Sales Box with Real-Time '+' Addition
                 OutlinedTextField(
                     value = salesInput,
                     onValueChange = { if (!isFutureDate) salesInput = it },
