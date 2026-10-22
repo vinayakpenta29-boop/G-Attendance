@@ -1,8 +1,11 @@
 package com.attendance.app
 
 import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -22,7 +25,9 @@ import androidx.work.WorkManager
 import com.google.android.gms.location.LocationServices
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import java.time.Duration
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.YearMonth
 import java.util.concurrent.TimeUnit
@@ -39,13 +44,17 @@ class MainActivity : ComponentActivity() {
         if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
             startBackgroundWorker()
         }
+        // Notification permission granted or handled
+        scheduleDailySalesReminder()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        createSalesNotificationChannel()
         loadData()
         autoFinalizePostWorkHourAttendance()
         requestPermissions()
+        scheduleDailySalesReminder()
 
         setContent {
             val currentMonth = remember { YearMonth.now() }
@@ -76,6 +85,50 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         loadData()
         autoFinalizePostWorkHourAttendance()
+    }
+
+    // Creates the high-priority notification channel
+    private fun createSalesNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                SalesReminderWorker.CHANNEL_ID,
+                "Daily Sales Reminder",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Reminds you every day at 10 PM to log today's sales."
+                enableVibration(true)
+            }
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(channel)
+        }
+    }
+
+    // Schedules the 10:00 PM Daily Reminder
+    private fun scheduleDailySalesReminder() {
+        val now = LocalDateTime.now()
+        var target10PM = now.withHour(22).withMinute(0).withSecond(0).withNano(0)
+
+        // If it's already past 10:00 PM today, set target to tomorrow at 10:00 PM
+        if (now.isAfter(target10PM)) {
+            target10PM = target10PM.plusDays(1)
+        }
+
+        val initialDelayMillis = Duration.between(now, target10PM).toMillis()
+
+        val reminderRequest = PeriodicWorkRequestBuilder<SalesReminderWorker>(24, TimeUnit.HOURS)
+            .setInitialDelay(initialDelayMillis, TimeUnit.MILLISECONDS)
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
+                    .build()
+            )
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "daily_sales_reminder_10pm",
+            ExistingPeriodicWorkPolicy.UPDATE,
+            reminderRequest
+        )
     }
 
     private fun autoFinalizePostWorkHourAttendance() {
@@ -158,12 +211,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestPermissions() {
-        permissionLauncher.launch(
-            arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            )
+        val permissionsList = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
         )
+
+        // Android 13+ Notification Permission
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissionsList.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        permissionLauncher.launch(permissionsList.toTypedArray())
     }
 
     private fun loadData() {
