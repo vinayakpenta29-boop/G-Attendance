@@ -10,6 +10,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -161,7 +162,6 @@ fun CalendarPdfDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Title & Year Selector
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("📅", fontSize = 18.sp)
                         Spacer(modifier = Modifier.width(6.dp))
@@ -174,7 +174,6 @@ fun CalendarPdfDialog(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // Year Switcher (‹ Year ›)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
@@ -218,12 +217,10 @@ fun CalendarPdfDialog(
                         }
                     }
 
-                    // Top Right Action Buttons: Delete (if exists), Plus (+), and Close (✕)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        // Delete Button (Shown only when a PDF exists for this year)
                         if (fileExists) {
                             IconButton(
                                 onClick = { showDeleteConfirmDialog = true },
@@ -236,7 +233,6 @@ fun CalendarPdfDialog(
                             }
                         }
 
-                        // Plus (+) Button to Add PDF for a Year
                         FilledTonalIconButton(
                             onClick = { showYearInputDialog = true },
                             modifier = Modifier.size(34.dp),
@@ -248,7 +244,6 @@ fun CalendarPdfDialog(
                             Text("+", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                         }
 
-                        // Close Dialog Button
                         IconButton(
                             onClick = onDismiss,
                             modifier = Modifier
@@ -263,16 +258,14 @@ fun CalendarPdfDialog(
 
                 Divider(color = CardBorder, thickness = 1.dp)
 
-                // Body Content
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .background(Color(0xFF0F172A)), // Dark background for crisp contrast
+                        .background(Color(0xFF0F172A)),
                     contentAlignment = Alignment.Center
                 ) {
                     if (fileExists && currentBitmap != null) {
-                        // Zoomable & Pannable PDF Viewer Container
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -304,7 +297,6 @@ fun CalendarPdfDialog(
                             )
                         }
 
-                        // Zoom Reset Button (visible when zoomed in)
                         if (scale > 1.05f) {
                             Surface(
                                 shape = RoundedCornerShape(20.dp),
@@ -329,7 +321,6 @@ fun CalendarPdfDialog(
                     } else if (isLoading) {
                         CircularProgressIndicator(color = Color.White)
                     } else {
-                        // Empty State when no PDF is found for this year
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.padding(24.dp)
@@ -360,7 +351,6 @@ fun CalendarPdfDialog(
                     }
                 }
 
-                // Bottom Page Navigation Bar (when PDF has pages)
                 if (fileExists && pageCount > 1) {
                     Divider(color = CardBorder, thickness = 1.dp)
                     Row(
@@ -407,7 +397,6 @@ fun CalendarPdfDialog(
         }
     }
 
-    // Dialog: Ask for Year before picking PDF
     if (showYearInputDialog) {
         var yearInputText by remember { mutableStateOf(viewYear.toString()) }
 
@@ -440,7 +429,6 @@ fun CalendarPdfDialog(
                         val parsedYear = yearInputText.trim().toIntOrNull() ?: viewYear
                         targetUploadYear = parsedYear
                         showYearInputDialog = false
-                        // Launch system file picker for PDF
                         pdfPickerLauncher.launch("application/pdf")
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = BrandPrimary)
@@ -456,7 +444,6 @@ fun CalendarPdfDialog(
         )
     }
 
-    // Dialog: Confirm Delete Calendar PDF
     if (showDeleteConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
