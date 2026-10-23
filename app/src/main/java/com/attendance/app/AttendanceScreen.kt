@@ -234,7 +234,6 @@ fun AttendanceScreen(
         }
     }
 
-    // Mahalakshmi Calendar PDF Viewer Dialog
     if (showCalendarPdfDialog) {
         CalendarPdfDialog(
             initialYear = displayedMonth.year,
@@ -242,7 +241,6 @@ fun AttendanceScreen(
         )
     }
 
-    // Safety Confirmation Dialog for Updating GPS
     if (showGpsConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showGpsConfirmDialog = false },
@@ -303,7 +301,6 @@ fun AttendanceScreen(
         )
     }
 
-    // Manual Edit Day Dialog
     selectedDayForEdit?.let { day ->
         EditAttendanceDialog(
             day = day,
@@ -1486,7 +1483,7 @@ fun EditAttendanceDialog(
                             Text("📅", fontSize = 14.sp)
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Normal Working Day[span_0](start_span)"[span_0](end_span),
+                                text = "Normal Working Day",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = TextSecondary
@@ -1500,7 +1497,7 @@ fun EditAttendanceDialog(
                 OutlinedTextField(
                     value = salesInput,
                     onValueChange = { if (!isFutureDate) salesInput = it },
-                    label = { Text("Daily Sales Amount (₹)[span_1](start_span)"[span_1](end_span)) },
+                    label = { Text("Daily Sales Amount (₹)") },
                     placeholder = { Text(if (isFutureDate) "Locked" else "e.g. 500+250+300") },
                     supportingText = {
                         if (salesInput.contains("+") && computedSales > 0) {
@@ -1520,7 +1517,7 @@ fun EditAttendanceDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(
-                    text = if (isFutureDate) "Work Attendance (Locked)" else "Work Attendance[span_2](start_span)"[span_2](end_span),
+                    text = if (isFutureDate) "Work Attendance (Locked)" else "Work Attendance",
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,
                     color = if (isFutureDate) TextSecondary else TextPrimary
@@ -1547,7 +1544,7 @@ fun EditAttendanceDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = if (isFutureDate) "Dabba Allowance (Locked)" else "Dabba Allowance[span_3](start_span)"[span_3](end_span),
+                    text = if (isFutureDate) "Dabba Allowance (Locked)" else "Dabba Allowance",
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,
                     color = if (isFutureDate) TextSecondary else TextPrimary
@@ -1619,7 +1616,7 @@ fun EditAttendanceDialog(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = BrandPrimary)
                 ) {
-                    Text("Save Changes[span_4](start_span)"[span_4](end_span))
+                    Text("Save Changes")
                 }
             } else {
                 Button(
@@ -1632,7 +1629,7 @@ fun EditAttendanceDialog(
         },
         dismissButton = {
             if (!isFutureDate) {
-                TextButton(onClick = onDismiss) { Text("Cancel[span_5](start_span)"[span_5](end_span)) }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
             }
         }
     )
@@ -1925,7 +1922,7 @@ fun ManageAmavasyaDialog(
                         amavasyaMap[day] = finalName
                         editingDay = null
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = AmavasyaPurple)
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandPrimary)
                 ) {
                     Text("Set", color = Color.White)
                 }
