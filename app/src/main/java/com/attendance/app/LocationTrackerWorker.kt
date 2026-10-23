@@ -5,6 +5,8 @@ import android.location.Location
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.gms.tasks.Tasks
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -27,19 +29,28 @@ class LocationTrackerWorker(
         if (targetLat == 0.0 && targetLng == 0.0) return Result.success()
 
         val fusedClient = LocationServices.getFusedLocationProviderClient(applicationContext)
+
+        // Force fresh GPS acquisition rather than relying on null/stale cache
         val location: Location? = try {
-            Tasks.await(fusedClient.lastLocation)
+            val cts = CancellationTokenSource()
+            Tasks.await(fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token))
+                ?: Tasks.await(fusedClient.lastLocation)
         } catch (e: Exception) {
-            null
+            try {
+                Tasks.await(fusedClient.lastLocation)
+            } catch (ex: Exception) {
+                null
+            }
         }
 
-        val isInside = if (location != null) {
-            val results = FloatArray(1)
-            Location.distanceBetween(location.latitude, location.longitude, targetLat, targetLng, results)
-            results[0] <= radius
-        } else {
-            false
-        }
+        if (location == null) return Result.success()
+
+        val results = FloatArray(1)
+        Location.distanceBetween(location.latitude, location.longitude, targetLat, targetLng, results)
+
+        // Include GPS accuracy tolerance (up to 50m) to prevent indoor drift false-negatives
+        val accuracyTolerance = location.accuracy.coerceAtMost(50f)
+        val isInside = results[0] <= (radius + accuracyTolerance)
 
         evaluateAndPersistAttendance(isInside, prefs)
         return Result.success()
@@ -50,15 +61,18 @@ class LocationTrackerWorker(
         val today = LocalDate.now().toString()
         val dayNum = LocalDate.now().dayOfMonth
 
-        val h1Start = LocalTime.of(10, 0)
+        val h1Start = LocalTime.of(10, 30)
         val splitTime = LocalTime.of(15, 0)
         val h2End = LocalTime.of(21, 0)
+        val postWorkFinalizeTime = LocalTime.of(21, 30) // Grace period up to 9:20 PM
 
         if (isInside) {
+            // First Half: 10:00 AM to 3:00 PM
             if (now.isAfter(h1Start) && now.isBefore(splitTime)) {
                 trackerPrefs.edit().putBoolean("${today}_h1", true).apply()
             }
-            if (now.isAfter(splitTime) && now.isBefore(h2End)) {
+            // Second Half: 3:00 PM to 9:20 PM
+            if (now.isAfter(splitTime) && now.isBefore(postWorkFinalizeTime)) {
                 trackerPrefs.edit().putBoolean("${today}_h2", true).apply()
             }
         }
@@ -67,39 +81,54 @@ class LocationTrackerWorker(
         val wasInSecondHalf = trackerPrefs.getBoolean("${today}_h2", false)
 
         val calculatedStatus = when {
-            now.isAfter(h2End) -> {
+            // Final decision after shift ends (after 9:20 PM)
+            now.isAfter(postWorkFinalizeTime) -> {
                 when {
                     wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
                     wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY
                     else -> AttendanceStatus.ABSENT
                 }
             }
+            // Live status during work hours
+            wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
             wasInFirstHalf && isInside && now.isAfter(splitTime) -> AttendanceStatus.PRESENT
-            wasInFirstHalf || (isInside && now.isAfter(h1Start)) -> AttendanceStatus.HALF_DAY
+            wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY
+            isInside && now.isAfter(h1Start) -> AttendanceStatus.HALF_DAY
             else -> AttendanceStatus.NOT_MARKED
         }
 
-        val dbPrefs = applicationContext.getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
-        val json = dbPrefs.getString("records", null)
-        val type = object : TypeToken<MutableMap<String, DayAttendance>>() {}.type
-        val map: MutableMap<String, DayAttendance> = if (!json.isNullOrEmpty()) {
-            gson.fromJson(json, type)
-        } else {
-            mutableMapOf()
-        }
-
-        val existingDay = map[today] ?: DayAttendance(dateString = today, dayOfMonth = dayNum)
-
-        if (!existingDay.isManual && calculatedStatus != AttendanceStatus.NOT_MARKED) {
-            // Auto-assign Dabba to A if Absent or Half-Day
-            val autoDabba = if (calculatedStatus == AttendanceStatus.ABSENT || calculatedStatus == AttendanceStatus.HALF_DAY) {
-                DabbaStatus.ABSENT
+        try {
+            val dbPrefs = applicationContext.getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
+            val json = dbPrefs.getString("records", null)
+            val type = object : TypeToken<MutableMap<String, DayAttendance>>() {}.type
+            val map: MutableMap<String, DayAttendance> = if (!json.isNullOrEmpty()) {
+                gson.fromJson(json, type) ?: mutableMapOf()
             } else {
-                existingDay.dabbaStatus
+                mutableMapOf()
             }
 
-            map[today] = existingDay.copy(workStatus = calculatedStatus, dabbaStatus = autoDabba)
-            dbPrefs.edit().putString("records", gson.toJson(map)).apply()
+            val existingDay = map[today] ?: DayAttendance(dateString = today, dayOfMonth = dayNum)
+
+            // Never overwrite manually edited days
+            if (!existingDay.isManual && calculatedStatus != AttendanceStatus.NOT_MARKED) {
+                val autoDabba = if (calculatedStatus == AttendanceStatus.ABSENT || calculatedStatus == AttendanceStatus.HALF_DAY) {
+                    DabbaStatus.ABSENT
+                } else {
+                    existingDay.dabbaStatus ?: DabbaStatus.NOT_MARKED
+                }
+
+                map[today] = existingDay.copy(
+                    workStatus = calculatedStatus,
+                    dabbaStatus = autoDabba,
+                    holidayName = existingDay.holidayName ?: "",
+                    amavasyaName = existingDay.amavasyaName ?: "",
+                    salesAmount = existingDay.salesAmount,
+                    salesBills = existingDay.salesBills ?: ""
+                )
+                dbPrefs.edit().putString("records", gson.toJson(map)).apply()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 }
