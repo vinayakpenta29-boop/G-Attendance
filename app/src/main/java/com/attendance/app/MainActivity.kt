@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
 
             val h1Start = LocalTime.of(10, 0)
             val splitTime = LocalTime.of(15, 0)
-            val h2End = LocalTime.of(21, 00)
+            val h2End = LocalTime.of(21, 20)
 
             if (isInside) {
                 if (now.isAfter(h1Start) && now.isBefore(splitTime)) {
