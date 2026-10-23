@@ -61,10 +61,10 @@ class LocationTrackerWorker(
         val today = LocalDate.now().toString()
         val dayNum = LocalDate.now().dayOfMonth
 
-        val h1Start = LocalTime.of(10, 30)
+        val h1Start = LocalTime.of(10, 0)
         val splitTime = LocalTime.of(15, 0)
         val h2End = LocalTime.of(21, 0)
-        val postWorkFinalizeTime = LocalTime.of(21, 30) // Grace period up to 9:20 PM
+        val postWorkFinalizeTime = LocalTime.of(21, 20) // Grace period up to 9:20 PM
 
         if (isInside) {
             // First Half: 10:00 AM to 3:00 PM
