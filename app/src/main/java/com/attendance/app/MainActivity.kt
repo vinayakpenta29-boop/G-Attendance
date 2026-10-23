@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.Location
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -23,6 +24,8 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.time.Duration
@@ -43,8 +46,8 @@ class MainActivity : ComponentActivity() {
     ) { permissions ->
         if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
             startBackgroundWorker()
+            checkLiveLocationAtWorkplace()
         }
-        // Notification permission granted or handled
         scheduleDailySalesReminder()
     }
 
@@ -52,8 +55,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         createSalesNotificationChannel()
         loadData()
-        autoFinalizePostWorkHourAttendance()
         requestPermissions()
+        checkLiveLocationAtWorkplace()
         scheduleDailySalesReminder()
 
         setContent {
@@ -84,10 +87,89 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         loadData()
-        autoFinalizePostWorkHourAttendance()
+        checkLiveLocationAtWorkplace()
     }
 
-    // Creates the high-priority notification channel
+    // Actively checks location whenever you open or resume the app
+    private fun checkLiveLocationAtWorkplace() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
+
+        if (settings.workLatitude == 0.0 && settings.workLongitude == 0.0) return
+
+        val fusedClient = LocationServices.getFusedLocationProviderClient(this)
+        val cts = CancellationTokenSource()
+
+        fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token).addOnSuccessListener { loc ->
+            val location = loc ?: return@addOnSuccessListener
+            val results = FloatArray(1)
+            Location.distanceBetween(location.latitude, location.longitude, settings.workLatitude, settings.workLongitude, results)
+
+            val accuracyTolerance = location.accuracy.coerceAtMost(50f)
+            val isInside = results[0] <= (settings.geofenceRadiusMeters + accuracyTolerance)
+
+            val trackerPrefs = getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
+            val now = LocalTime.now()
+            val today = LocalDate.now().toString()
+            val dayNum = LocalDate.now().dayOfMonth
+
+            val h1Start = LocalTime.of(10, 0)
+            val splitTime = LocalTime.of(15, 0)
+            val h2End = LocalTime.of(21, 00)
+
+            if (isInside) {
+                if (now.isAfter(h1Start) && now.isBefore(splitTime)) {
+                    trackerPrefs.edit().putBoolean("${today}_h1", true).apply()
+                }
+                if (now.isAfter(splitTime) && now.isBefore(h2End)) {
+                    trackerPrefs.edit().putBoolean("${today}_h2", true).apply()
+                }
+            }
+
+            val wasInFirstHalf = trackerPrefs.getBoolean("${today}_h1", false)
+            val wasInSecondHalf = trackerPrefs.getBoolean("${today}_h2", false)
+
+            val currentRecord = attendanceMap[today] ?: DayAttendance(dateString = today, dayOfMonth = dayNum)
+
+            if (!currentRecord.isManual) {
+                val newStatus = when {
+                    now.isAfter(h2End) -> {
+                        when {
+                            wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
+                            wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY
+                            else -> AttendanceStatus.ABSENT
+                        }
+                    }
+                    wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
+                    wasInFirstHalf && isInside && now.isAfter(splitTime) -> AttendanceStatus.PRESENT
+                    wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY
+                    isInside && now.isAfter(h1Start) -> AttendanceStatus.HALF_DAY
+                    else -> currentRecord.workStatus ?: AttendanceStatus.NOT_MARKED
+                }
+
+                if (newStatus != AttendanceStatus.NOT_MARKED && newStatus != currentRecord.workStatus) {
+                    val finalDabba = if (newStatus == AttendanceStatus.ABSENT || newStatus == AttendanceStatus.HALF_DAY) {
+                        DabbaStatus.ABSENT
+                    } else {
+                        currentRecord.dabbaStatus
+                    }
+
+                    val updatedRecord = currentRecord.copy(
+                        workStatus = newStatus,
+                        dabbaStatus = finalDabba,
+                        holidayName = currentRecord.holidayName ?: "",
+                        amavasyaName = currentRecord.amavasyaName ?: "",
+                        salesAmount = currentRecord.salesAmount,
+                        salesBills = currentRecord.salesBills ?: ""
+                    )
+                    attendanceMap[today] = updatedRecord
+                    saveAttendance()
+                }
+            }
+        }
+    }
+
     private fun createSalesNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -103,12 +185,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // Schedules the 10:00 PM Daily Reminder
     private fun scheduleDailySalesReminder() {
         val now = LocalDateTime.now()
         var target10PM = now.withHour(22).withMinute(0).withSecond(0).withNano(0)
 
-        // If it's already past 10:00 PM today, set target to tomorrow at 10:00 PM
         if (now.isAfter(target10PM)) {
             target10PM = target10PM.plusDays(1)
         }
@@ -131,67 +211,28 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    private fun autoFinalizePostWorkHourAttendance() {
-        try {
-            val now = LocalTime.now()
-            val today = LocalDate.now().toString()
-            val dayNum = LocalDate.now().dayOfMonth
-
-            if (now.isAfter(LocalTime.of(21, 0))) {
-                val trackerPrefs = getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
-                val wasInFirstHalf = trackerPrefs.getBoolean("${today}_h1", false)
-                val wasInSecondHalf = trackerPrefs.getBoolean("${today}_h2", false)
-
-                val currentRecord = attendanceMap[today] ?: DayAttendance(dateString = today, dayOfMonth = dayNum)
-
-                if (!currentRecord.isManual && currentRecord.workStatus == AttendanceStatus.NOT_MARKED) {
-                    val finalStatus = when {
-                        wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
-                        wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY
-                        else -> AttendanceStatus.ABSENT
-                    }
-
-                    val finalDabba = if (finalStatus == AttendanceStatus.ABSENT || finalStatus == AttendanceStatus.HALF_DAY) {
-                        DabbaStatus.ABSENT
-                    } else {
-                        currentRecord.dabbaStatus
-                    }
-
-                    val updatedRecord = currentRecord.copy(
-                        workStatus = finalStatus,
-                        dabbaStatus = finalDabba,
-                        holidayName = currentRecord.holidayName ?: "",
-                        amavasyaName = currentRecord.amavasyaName ?: "",
-                        salesAmount = currentRecord.salesAmount
-                    )
-                    attendanceMap[today] = updatedRecord
-                    saveAttendance()
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
     private fun setCurrentLocationAsWork() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             Toast.makeText(this, "Location permission required", Toast.LENGTH_SHORT).show()
             return
         }
 
-        LocationServices.getFusedLocationProviderClient(this).lastLocation.addOnSuccessListener { loc ->
-            if (loc != null) {
-                settings = settings.copy(workLatitude = loc.latitude, workLongitude = loc.longitude)
-                getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE).edit()
-                    .putFloat("work_lat", loc.latitude.toFloat())
-                    .putFloat("work_lng", loc.longitude.toFloat())
-                    .apply()
-                saveSettings()
-                Toast.makeText(this, "Workplace GPS locked successfully!", Toast.LENGTH_LONG).show()
-            } else {
-                Toast.makeText(this, "Could not acquire GPS. Turn ON device location.", Toast.LENGTH_LONG).show()
+        val cts = CancellationTokenSource()
+        LocationServices.getFusedLocationProviderClient(this)
+            .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
+            .addOnSuccessListener { loc ->
+                if (loc != null) {
+                    settings = settings.copy(workLatitude = loc.latitude, workLongitude = loc.longitude)
+                    getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE).edit()
+                        .putFloat("work_lat", loc.latitude.toFloat())
+                        .putFloat("work_lng", loc.longitude.toFloat())
+                        .apply()
+                    saveSettings()
+                    Toast.makeText(this, "Workplace GPS locked successfully!", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(this, "Could not acquire GPS. Turn ON device location.", Toast.LENGTH_LONG).show()
+                }
             }
-        }
     }
 
     private fun startBackgroundWorker() {
@@ -205,7 +246,7 @@ class MainActivity : ComponentActivity() {
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "attendance_tracker",
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             workRequest
         )
     }
@@ -216,7 +257,6 @@ class MainActivity : ComponentActivity() {
             Manifest.permission.ACCESS_COARSE_LOCATION
         )
 
-        // Android 13+ Notification Permission
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissionsList.add(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -254,7 +294,8 @@ class MainActivity : ComponentActivity() {
                             holidayName = raw.holidayName ?: "",
                             isAmavasya = raw.isAmavasya,
                             amavasyaName = raw.amavasyaName ?: "",
-                            salesAmount = raw.salesAmount
+                            salesAmount = raw.salesAmount,
+                            salesBills = raw.salesBills ?: ""
                         )
                     }
 
