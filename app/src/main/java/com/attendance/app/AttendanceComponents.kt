@@ -2,6 +2,7 @@ package com.attendance.app
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -434,7 +435,6 @@ fun ModernCalendarCard(
         shadowElevation = 2.dp
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // Header Days of Week
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -452,7 +452,6 @@ fun ModernCalendarCard(
                 }
             }
 
-            // Naturally wrapping calendar rows (automatically handles 4, 5, or 6 weeks)
             Column(modifier = Modifier.fillMaxWidth()) {
                 for (row in 0 until totalRows) {
                     Row(
