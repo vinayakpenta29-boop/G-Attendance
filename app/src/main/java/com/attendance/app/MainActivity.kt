@@ -18,11 +18,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
-import androidx.work.Constraints
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
@@ -34,6 +29,7 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.YearMonth
 import java.util.concurrent.TimeUnit
+import androidx.work.*
 
 class MainActivity : ComponentActivity() {
 
@@ -45,7 +41,7 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
-            startBackgroundWorker()
+            LocationTrackerWorker.scheduleNext(this)
             checkLiveLocationAtWorkplace()
         }
         scheduleDailySalesReminder()
@@ -56,6 +52,7 @@ class MainActivity : ComponentActivity() {
         createSalesNotificationChannel()
         loadData()
         requestPermissions()
+        LocationTrackerWorker.scheduleNext(this)
         checkLiveLocationAtWorkplace()
         scheduleDailySalesReminder()
 
@@ -87,10 +84,10 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         loadData()
+        LocationTrackerWorker.scheduleNext(this)
         checkLiveLocationAtWorkplace()
     }
 
-    // Actively checks location whenever you open or resume the app
     private fun checkLiveLocationAtWorkplace() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return
@@ -106,66 +103,85 @@ class MainActivity : ComponentActivity() {
             val results = FloatArray(1)
             Location.distanceBetween(location.latitude, location.longitude, settings.workLatitude, settings.workLongitude, results)
 
-            val accuracyTolerance = location.accuracy.coerceAtMost(50f)
-            val isInside = results[0] <= (settings.geofenceRadiusMeters + accuracyTolerance)
+            val tolerance = location.accuracy.coerceAtMost(50f)
+            val isInside = results[0] <= (settings.geofenceRadiusMeters + tolerance)
 
             val trackerPrefs = getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
             val now = LocalTime.now()
             val today = LocalDate.now().toString()
             val dayNum = LocalDate.now().dayOfMonth
 
-            val h1Start = LocalTime.of(10, 0)
-            val splitTime = LocalTime.of(15, 0)
-            val h2End = LocalTime.of(21, 20)
+            val t1000 = LocalTime.of(10, 0)
+            val t1015 = LocalTime.of(10, 15, 59)
+            val t1500 = LocalTime.of(15, 0)
+            val t2100 = LocalTime.of(21, 0)
 
+            val currentDabbaPref = trackerPrefs.getString("${today}_dabba", null)
             if (isInside) {
-                if (now.isAfter(h1Start) && now.isBefore(splitTime)) {
+                if (now.isAfter(t1000) && !now.isAfter(t1015)) {
+                    trackerPrefs.edit().putString("${today}_dabba", "P").apply()
+                } else if (now.isAfter(t1015) && currentDabbaPref != "P") {
+                    trackerPrefs.edit().putString("${today}_dabba", "L").apply()
+                }
+
+                if (now.isAfter(t1000) && now.isBefore(t1500)) {
                     trackerPrefs.edit().putBoolean("${today}_h1", true).apply()
                 }
-                if (now.isAfter(splitTime) && now.isBefore(h2End)) {
+                if (now.isAfter(t1500) && now.isBefore(t2100)) {
                     trackerPrefs.edit().putBoolean("${today}_h2", true).apply()
                 }
             }
 
             val wasInFirstHalf = trackerPrefs.getBoolean("${today}_h1", false)
             val wasInSecondHalf = trackerPrefs.getBoolean("${today}_h2", false)
+            val recordedDabba = trackerPrefs.getString("${today}_dabba", null)
 
             val currentRecord = attendanceMap[today] ?: DayAttendance(dateString = today, dayOfMonth = dayNum)
+            if (currentRecord.isManual) return@addOnSuccessListener
 
-            if (!currentRecord.isManual) {
-                val newStatus = when {
-                    now.isAfter(h2End) -> {
-                        when {
-                            wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
-                            wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY
-                            else -> AttendanceStatus.ABSENT
-                        }
+            var newWorkStatus = currentRecord.safeWorkStatus
+            var newDabbaStatus = currentRecord.safeDabbaStatus
+
+            when {
+                now.isAfter(t2100) -> {
+                    newWorkStatus = when {
+                        wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
+                        wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY
+                        else -> AttendanceStatus.ABSENT
                     }
-                    wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
-                    wasInFirstHalf && isInside && now.isAfter(splitTime) -> AttendanceStatus.PRESENT
-                    wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY
-                    isInside && now.isAfter(h1Start) -> AttendanceStatus.HALF_DAY
-                    else -> currentRecord.workStatus ?: AttendanceStatus.NOT_MARKED
-                }
-
-                if (newStatus != AttendanceStatus.NOT_MARKED && newStatus != currentRecord.workStatus) {
-                    val finalDabba = if (newStatus == AttendanceStatus.ABSENT || newStatus == AttendanceStatus.HALF_DAY) {
-                        DabbaStatus.ABSENT
-                    } else {
-                        currentRecord.dabbaStatus
+                    newDabbaStatus = when {
+                        newWorkStatus == AttendanceStatus.ABSENT -> DabbaStatus.ABSENT
+                        recordedDabba == "P" -> DabbaStatus.PRESENT
+                        recordedDabba == "L" -> DabbaStatus.L
+                        else -> DabbaStatus.ABSENT
                     }
-
-                    val updatedRecord = currentRecord.copy(
-                        workStatus = newStatus,
-                        dabbaStatus = finalDabba,
-                        holidayName = currentRecord.holidayName ?: "",
-                        amavasyaName = currentRecord.amavasyaName ?: "",
-                        salesAmount = currentRecord.salesAmount,
-                        salesBills = currentRecord.salesBills ?: ""
-                    )
-                    attendanceMap[today] = updatedRecord
-                    saveAttendance()
                 }
+                now.isAfter(t1500) -> {
+                    newWorkStatus = if (wasInFirstHalf) AttendanceStatus.HALF_DAY else AttendanceStatus.ABSENT
+                    newDabbaStatus = when {
+                        newWorkStatus == AttendanceStatus.ABSENT -> DabbaStatus.ABSENT
+                        recordedDabba == "P" -> DabbaStatus.PRESENT
+                        recordedDabba == "L" -> DabbaStatus.L
+                        else -> DabbaStatus.ABSENT
+                    }
+                }
+                else -> {
+                    if (recordedDabba == "P") newDabbaStatus = DabbaStatus.PRESENT
+                    else if (recordedDabba == "L") newDabbaStatus = DabbaStatus.L
+                }
+            }
+
+            if (newWorkStatus != currentRecord.safeWorkStatus || newDabbaStatus != currentRecord.safeDabbaStatus) {
+                val updatedRecord = currentRecord.copy(
+                    workStatus = newWorkStatus,
+                    dabbaStatus = newDabbaStatus,
+                    holidayName = currentRecord.holidayName ?: "",
+                    amavasyaName = currentRecord.amavasyaName ?: "",
+                    salesAmount = currentRecord.salesAmount,
+                    salesBills = currentRecord.salesBills ?: ""
+                )
+                attendanceMap[today] = updatedRecord
+                saveAttendance()
             }
         }
     }
@@ -233,22 +249,6 @@ class MainActivity : ComponentActivity() {
                     Toast.makeText(this, "Could not acquire GPS. Turn ON device location.", Toast.LENGTH_LONG).show()
                 }
             }
-    }
-
-    private fun startBackgroundWorker() {
-        val workRequest = PeriodicWorkRequestBuilder<LocationTrackerWorker>(15, TimeUnit.MINUTES)
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
-                    .build()
-            )
-            .build()
-
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "attendance_tracker",
-            ExistingPeriodicWorkPolicy.UPDATE,
-            workRequest
-        )
     }
 
     private fun requestPermissions() {
