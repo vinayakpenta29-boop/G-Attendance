@@ -19,23 +19,6 @@ import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
 
-data class MonthLeavesData(
-    val monthName: String,
-    val absentCount: Int,
-    val halfDayCount: Int,
-    val totalLeaves: Double
-)
-
-private val CardBorder = Color(0xFFE2E8F0)
-private val TextPrimary = Color(0xFF0F172A)
-private val TextSecondary = Color(0xFF64748B)
-private val BrandPrimary = Color(0xFF4F46E5)
-private val SuccessGreen = Color(0xFF10B981)
-private val SuccessBg = Color(0xFFECFDF5)
-private val DangerRed = Color(0xFFEF4444)
-private val DangerBg = Color(0xFFFEF2F2)
-private val WarningBg = Color(0xFFFFFBEB)
-
 @Composable
 fun LeavesHistoryDialog(
     initialYear: Int,
