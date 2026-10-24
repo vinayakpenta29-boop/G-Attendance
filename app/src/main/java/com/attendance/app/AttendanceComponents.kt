@@ -2,11 +2,8 @@ package com.attendance.app
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -425,6 +422,10 @@ fun ModernCalendarCard(
     val days = listOf("M", "T", "W", "T", "F", "S", "S")
     val todayString = LocalDate.now().toString()
 
+    val firstDayOffset = currentMonth.atDay(1).dayOfWeek.value - 1
+    val totalCells = firstDayOffset + daysInMonth
+    val totalRows = (totalCells + 6) / 7
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -433,6 +434,7 @@ fun ModernCalendarCard(
         shadowElevation = 2.dp
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
+            // Header Days of Week
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -450,30 +452,39 @@ fun ModernCalendarCard(
                 }
             }
 
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(7),
-                modifier = Modifier.height(330.dp),
-                userScrollEnabled = false
-            ) {
-                val firstDayOffset = currentMonth.atDay(1).dayOfWeek.value - 1
-                items(firstDayOffset) {
-                    Box(modifier = Modifier.size(46.dp))
-                }
+            // Naturally wrapping calendar rows (automatically handles 4, 5, or 6 weeks)
+            Column(modifier = Modifier.fillMaxWidth()) {
+                for (row in 0 until totalRows) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        for (col in 0 until 7) {
+                            val cellIndex = row * 7 + col
+                            if (cellIndex < firstDayOffset || cellIndex >= totalCells) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            } else {
+                                val dayNum = cellIndex - firstDayOffset + 1
+                                val dateStr = currentMonth.atDay(dayNum).toString()
+                                val record = attendanceMap[dateStr]?.let {
+                                    if ((it.safeWorkStatus == AttendanceStatus.ABSENT || it.safeWorkStatus == AttendanceStatus.HALF_DAY) && it.safeDabbaStatus != DabbaStatus.ABSENT) {
+                                        it.copy(dabbaStatus = DabbaStatus.ABSENT)
+                                    } else {
+                                        it
+                                    }
+                                } ?: DayAttendance(dateString = dateStr, dayOfMonth = dayNum)
 
-                items(daysInMonth) { index ->
-                    val dayNum = index + 1
-                    val dateStr = currentMonth.atDay(dayNum).toString()
-                    val record = attendanceMap[dateStr]?.let {
-                        if ((it.safeWorkStatus == AttendanceStatus.ABSENT || it.safeWorkStatus == AttendanceStatus.HALF_DAY) && it.safeDabbaStatus != DabbaStatus.ABSENT) {
-                            it.copy(dabbaStatus = DabbaStatus.ABSENT)
-                        } else {
-                            it
+                                val isToday = (dateStr == todayString)
+
+                                ModernDayCell(
+                                    day = record,
+                                    isToday = isToday,
+                                    onClick = { onDayClick(record) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
-                    } ?: DayAttendance(dateString = dateStr, dayOfMonth = dayNum)
-
-                    val isToday = (dateStr == todayString)
-
-                    ModernDayCell(day = record, isToday = isToday, onClick = { onDayClick(record) })
+                    }
                 }
             }
         }
@@ -481,7 +492,12 @@ fun ModernCalendarCard(
 }
 
 @Composable
-fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
+fun ModernDayCell(
+    day: DayAttendance,
+    isToday: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val (bgColor, borderColor) = when {
         isToday -> Pair(Color(0xFFEEF2FF), BrandPrimary)
         day.safeWorkStatus == AttendanceStatus.PRESENT -> Pair(Color(0xFFF0FDF4), Color(0xFFBBF7D0))
@@ -493,7 +509,7 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
     }
 
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .padding(2.5.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(8.dp),
@@ -502,6 +518,7 @@ fun ModernDayCell(day: DayAttendance, isToday: Boolean, onClick: () -> Unit) {
     ) {
         Column(
             modifier = Modifier
+                .fillMaxWidth()
                 .padding(vertical = 4.dp, horizontal = 1.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
