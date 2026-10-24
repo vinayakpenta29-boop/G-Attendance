@@ -39,12 +39,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-private val BrandPrimary = Color(0xFF4F46E5)
-private val DangerRed = Color(0xFFEF4444)
-private val CardBorder = Color(0xFFE2E8F0)
-private val TextPrimary = Color(0xFF0F172A)
-private val TextSecondary = Color(0xFF64748B)
-
 @Composable
 fun CalendarPdfDialog(
     initialYear: Int,
@@ -54,20 +48,15 @@ fun CalendarPdfDialog(
     var viewYear by remember { mutableStateOf(initialYear) }
     var refreshTrigger by remember { mutableStateOf(0) }
 
-    // Dialog state for entering Year before picking file
     var showYearInputDialog by remember { mutableStateOf(false) }
     var targetUploadYear by remember { mutableStateOf(initialYear) }
-
-    // Dialog state for confirming deletion
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
-    // PDF file instance for the currently selected year
     val calendarFile = remember(viewYear, refreshTrigger) {
         File(context.filesDir, "mahalakshmi_calendar_$viewYear.pdf")
     }
     val fileExists = calendarFile.exists()
 
-    // File picker launcher
     val pdfPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -87,17 +76,14 @@ fun CalendarPdfDialog(
         }
     }
 
-    // PDF Rendering states
     var pageCount by remember { mutableStateOf(0) }
     var currentPageIndex by remember { mutableStateOf(0) }
     var currentBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
-    // Pinch-to-zoom & pan states
     var scale by remember(currentPageIndex, viewYear, refreshTrigger) { mutableStateOf(1f) }
     var offset by remember(currentPageIndex, viewYear, refreshTrigger) { mutableStateOf(Offset.Zero) }
 
-    // Render page when file or page index changes
     LaunchedEffect(calendarFile.absolutePath, currentPageIndex, refreshTrigger, fileExists) {
         if (!calendarFile.exists()) {
             currentBitmap = null
@@ -114,7 +100,6 @@ fun CalendarPdfDialog(
                 val safeIndex = currentPageIndex.coerceIn(0, (totalPages - 1).coerceAtLeast(0))
                 val page = renderer.openPage(safeIndex)
 
-                // Render at 2.5x density for sharp quality when zooming
                 val renderScale = 2.5f
                 val width = (page.width * renderScale).toInt()
                 val height = (page.height * renderScale).toInt()
@@ -153,7 +138,6 @@ fun CalendarPdfDialog(
             border = BorderStroke(1.dp, CardBorder)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Header Bar
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
