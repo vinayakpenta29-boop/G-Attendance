@@ -124,10 +124,10 @@ class MainActivity : ComponentActivity() {
                     trackerPrefs.edit().putString("${today}_dabba", "L").apply()
                 }
 
-                if (now.isAfter(t1000) && now.isBefore(t1500)) {
+                if (now.isAfter(t1000) && now.isBefore(LocalTime.of(15, 15))) {
                     trackerPrefs.edit().putBoolean("${today}_h1", true).apply()
                 }
-                if (now.isAfter(t1500) && now.isBefore(t2100)) {
+                if (now.isAfter(t1500) && now.isBefore(LocalTime.of(21, 30))) {
                     trackerPrefs.edit().putBoolean("${today}_h2", true).apply()
                 }
             }
