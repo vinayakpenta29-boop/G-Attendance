@@ -90,7 +90,6 @@ class LocationTrackerWorker(
         } catch (e: Exception) {
             e.printStackTrace()
         } finally {
-            // Automatically schedule the next run based on time of day
             scheduleNext(applicationContext)
         }
         return Result.success()
@@ -136,24 +135,23 @@ class LocationTrackerWorker(
         val t1500 = LocalTime.of(15, 0)
         val t2100 = LocalTime.of(21, 0)
 
-        // 1. Evaluate Dabba Attendance (10:00 AM - 10:30 AM and arrival tracking)
+        // 1. Dabba punch tracking
         val currentDabbaPref = trackerPrefs.getString("${today}_dabba", null)
         if (isInside) {
             if (now.isAfter(t1000) && !now.isAfter(t1015)) {
                 // Reached on or before 10:15 AM -> "P" Present
                 trackerPrefs.edit().putString("${today}_dabba", "P").apply()
             } else if (now.isAfter(t1015) && currentDabbaPref != "P") {
-                // Reached after 10:15 AM (10:16 AM onwards) -> "L" Late
+                // Reached after 10:15 AM (e.g. 10:20 AM) -> "L" Late
                 trackerPrefs.edit().putString("${today}_dabba", "L").apply()
             }
-        }
 
-        // 2. Track presence across halves
-        if (isInside) {
-            if (now.isAfter(t1000) && now.isBefore(t1500)) {
+            // First Half window (10:00 AM to 3:15 PM)
+            if (now.isAfter(t1000) && now.isBefore(LocalTime.of(15, 15))) {
                 trackerPrefs.edit().putBoolean("${today}_h1", true).apply()
             }
-            if (now.isAfter(t1500) && now.isBefore(t2100)) {
+            // Second Half window (3:00 PM to 9:30 PM - includes shift completion at 9:00 PM)
+            if (now.isAfter(t1500) && now.isBefore(LocalTime.of(21, 30))) {
                 trackerPrefs.edit().putBoolean("${today}_h2", true).apply()
             }
         }
@@ -162,7 +160,6 @@ class LocationTrackerWorker(
         val wasInSecondHalf = trackerPrefs.getBoolean("${today}_h2", false)
         val recordedDabba = trackerPrefs.getString("${today}_dabba", null)
 
-        // 3. Auto Attendance Evaluation
         val dbPrefs = applicationContext.getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
         val json = dbPrefs.getString("records", null)
         val type = object : TypeToken<MutableMap<String, DayAttendance>>() {}.type
@@ -173,8 +170,6 @@ class LocationTrackerWorker(
         }
 
         val existingDay = map[today] ?: DayAttendance(dateString = today, dayOfMonth = dayNum)
-
-        // Do not overwrite manual edits
         if (existingDay.isManual) return
 
         var newWorkStatus: AttendanceStatus = existingDay.safeWorkStatus
@@ -184,9 +179,9 @@ class LocationTrackerWorker(
             // Second Half Evaluation: Immediately after 9:00 PM
             now.isAfter(t2100) -> {
                 newWorkStatus = when {
-                    wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT // 10 AM to 9 PM = "P"
-                    wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY // One half = "H"
-                    else -> AttendanceStatus.ABSENT // Neither = "A"
+                    wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
+                    wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY
+                    else -> AttendanceStatus.ABSENT
                 }
 
                 newDabbaStatus = when {
@@ -209,7 +204,7 @@ class LocationTrackerWorker(
                 }
             }
 
-            // Morning Window (10:00 AM - 3:00 PM) live updates
+            // Morning Window (10:00 AM - 3:00 PM)
             else -> {
                 if (recordedDabba == "P") {
                     newDabbaStatus = DabbaStatus.PRESENT
