@@ -35,7 +35,7 @@ class LocationTrackerWorker(
             val t2100 = LocalTime.of(21, 0)
 
             val nextRunTime: LocalDateTime = when {
-                // Before 10:00 AM -> wait until 10:00 AM today
+                // Before 10:00 AM -> wait until 10:00 AM sharp today
                 time.isBefore(t1000) -> now.withHour(10).withMinute(0).withSecond(0).withNano(0)
 
                 // 10:00 AM - 10:30 AM -> track every 1 minute for Dabba punch
@@ -61,7 +61,7 @@ class LocationTrackerWorker(
                     }
                 }
 
-                // After 9:00 PM -> sleep until 10:00 AM tomorrow
+                // After 9:00 PM -> sleep until 10:00 AM sharp tomorrow
                 else -> now.plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0)
             }
 
@@ -130,27 +130,32 @@ class LocationTrackerWorker(
         val today = LocalDate.now().toString()
         val dayNum = LocalDate.now().dayOfMonth
 
-        val t1000 = LocalTime.of(10, 0)
         val t1015 = LocalTime.of(10, 15, 59)
         val t1500 = LocalTime.of(15, 0)
         val t2100 = LocalTime.of(21, 0)
 
-        // 1. Dabba punch tracking
+        val isAlreadyPresentBefore1015 = trackerPrefs.getBoolean("${today}_present_before_1015", false)
         val currentDabbaPref = trackerPrefs.getString("${today}_dabba", null)
+
         if (isInside) {
-            if (now.isAfter(t1000) && !now.isAfter(t1015)) {
-                // Reached on or before 10:15 AM -> "P" Present
-                trackerPrefs.edit().putString("${today}_dabba", "P").apply()
-            } else if (now.isAfter(t1015) && currentDabbaPref != "P") {
-                // Reached after 10:15 AM (e.g. 10:20 AM) -> "L" Late
-                trackerPrefs.edit().putString("${today}_dabba", "L").apply()
+            // Arrived at work on or before 10:15:59 AM (including early arrivals present at 10:00 AM) -> "P"
+            if (!now.isAfter(t1015)) {
+                trackerPrefs.edit()
+                    .putString("${today}_dabba", "P")
+                    .putBoolean("${today}_present_before_1015", true)
+                    .apply()
+            } else if (currentDabbaPref != "P" && !isAlreadyPresentBefore1015) {
+                // First arrival detected at or after 10:16 AM -> "L"
+                trackerPrefs.edit()
+                    .putString("${today}_dabba", "L")
+                    .apply()
             }
 
-            // First Half window (10:00 AM to 3:15 PM)
-            if (now.isAfter(t1000) && now.isBefore(LocalTime.of(15, 15))) {
+            // First Half (10:00 AM to 3:15 PM)
+            if (now.isBefore(LocalTime.of(15, 15))) {
                 trackerPrefs.edit().putBoolean("${today}_h1", true).apply()
             }
-            // Second Half window (3:00 PM to 9:30 PM - includes shift completion at 9:00 PM)
+            // Second Half (3:00 PM to 9:30 PM)
             if (now.isAfter(t1500) && now.isBefore(LocalTime.of(21, 30))) {
                 trackerPrefs.edit().putBoolean("${today}_h2", true).apply()
             }
@@ -204,7 +209,7 @@ class LocationTrackerWorker(
                 }
             }
 
-            // Morning Window (10:00 AM - 3:00 PM)
+            // Morning Window (10:00 AM - 3:00 PM) live status
             else -> {
                 if (recordedDabba == "P") {
                     newDabbaStatus = DabbaStatus.PRESENT
