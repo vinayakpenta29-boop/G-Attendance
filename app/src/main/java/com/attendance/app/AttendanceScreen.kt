@@ -35,6 +35,7 @@ fun AttendanceScreen(
     var showHolidayDialog by remember { mutableStateOf(false) }
     var showAmavasyaDialog by remember { mutableStateOf(false) }
     var showLeavesHistoryDialog by remember { mutableStateOf(false) }
+    var showArrivalHistoryDialog by remember { mutableStateOf(false) } // New arrival dialog state
     var showCalendarPdfDialog by remember { mutableStateOf(false) }
     var showGpsConfirmDialog by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -96,6 +97,13 @@ fun AttendanceScreen(
                         onDismissRequest = { menuExpanded = false },
                         modifier = Modifier.background(Color.White)
                     ) {
+                        DropdownMenuItem(
+                            text = { Text("Daily Arrival Log", fontWeight = FontWeight.Medium) },
+                            onClick = {
+                                menuExpanded = false
+                                showArrivalHistoryDialog = true
+                            }
+                        )
                         DropdownMenuItem(
                             text = { Text("Salary Configuration", fontWeight = FontWeight.Medium) },
                             onClick = {
@@ -187,6 +195,15 @@ fun AttendanceScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+
+    // New Arrival History Dialog
+    if (showArrivalHistoryDialog) {
+        ArrivalHistoryDialog(
+            initialMonth = displayedMonth,
+            attendanceMap = attendanceMap,
+            onDismiss = { showArrivalHistoryDialog = false }
+        )
     }
 
     if (showCalendarPdfDialog) {
