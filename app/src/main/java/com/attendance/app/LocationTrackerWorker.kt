@@ -35,13 +35,13 @@ class LocationTrackerWorker(
             val t2100 = LocalTime.of(21, 0)
 
             val nextRunTime: LocalDateTime = when {
-                // Before 10:00 AM -> wait until 10:00 AM sharp today
+                // Before 10:00 AM -> sleep until 10:00 AM sharp
                 time.isBefore(t1000) -> now.withHour(10).withMinute(0).withSecond(0).withNano(0)
 
                 // 10:00 AM - 10:30 AM -> track every 1 minute for Dabba punch
                 time.isBefore(t1030) -> now.plusMinutes(1).withSecond(0).withNano(0)
 
-                // 10:30 AM - 3:00 PM -> track every 30 minutes; snap to 3:00:05 PM for 1st half evaluation
+                // 10:30 AM - 3:00 PM -> track every 30 minutes; snap to 3:00:05 PM for H1 evaluation
                 time.isBefore(t1500) -> {
                     val candidate = now.plusMinutes(30)
                     if (candidate.toLocalTime().isAfter(t1500)) {
@@ -51,7 +51,7 @@ class LocationTrackerWorker(
                     }
                 }
 
-                // 3:00 PM - 9:00 PM -> track every 30 minutes; snap to 9:00:05 PM for 2nd half evaluation
+                // 3:00 PM - 9:00 PM -> track every 30 minutes; snap to 9:00:05 PM for H2 evaluation
                 time.isBefore(t2100) -> {
                     val candidate = now.plusMinutes(30)
                     if (candidate.toLocalTime().isAfter(t2100)) {
@@ -138,24 +138,23 @@ class LocationTrackerWorker(
         val currentDabbaPref = trackerPrefs.getString("${today}_dabba", null)
 
         if (isInside) {
-            // Arrived at work on or before 10:15:59 AM (including early arrivals present at 10:00 AM) -> "P"
+            // Punch evaluation: arrival on or before 10:15:59 AM locks "P", after 10:15:59 AM marks "L"
             if (!now.isAfter(t1015)) {
                 trackerPrefs.edit()
                     .putString("${today}_dabba", "P")
                     .putBoolean("${today}_present_before_1015", true)
                     .apply()
             } else if (currentDabbaPref != "P" && !isAlreadyPresentBefore1015) {
-                // First arrival detected at or after 10:16 AM -> "L"
                 trackerPrefs.edit()
                     .putString("${today}_dabba", "L")
                     .apply()
             }
 
-            // First Half (10:00 AM to 3:15 PM)
+            // H1 Presence (10:00 AM - 3:15 PM)
             if (now.isBefore(LocalTime.of(15, 15))) {
                 trackerPrefs.edit().putBoolean("${today}_h1", true).apply()
             }
-            // Second Half (3:00 PM to 9:30 PM)
+            // H2 Presence (3:00 PM - 9:30 PM)
             if (now.isAfter(t1500) && now.isBefore(LocalTime.of(21, 30))) {
                 trackerPrefs.edit().putBoolean("${today}_h2", true).apply()
             }
@@ -189,27 +188,27 @@ class LocationTrackerWorker(
                     else -> AttendanceStatus.ABSENT
                 }
 
-                newDabbaStatus = when {
-                    newWorkStatus == AttendanceStatus.ABSENT -> DabbaStatus.ABSENT
-                    recordedDabba == "P" -> DabbaStatus.PRESENT
-                    recordedDabba == "L" -> DabbaStatus.L
-                    else -> DabbaStatus.ABSENT
+                // If Work is P -> restore Dabba to P or L. If Work is H or A -> Dabba MUST be A.
+                newDabbaStatus = if (newWorkStatus == AttendanceStatus.PRESENT) {
+                    when (recordedDabba) {
+                        "P" -> DabbaStatus.PRESENT
+                        "L" -> DabbaStatus.L
+                        else -> DabbaStatus.ABSENT
+                    }
+                } else {
+                    DabbaStatus.ABSENT
                 }
             }
 
-            // First Half Evaluation: Immediately after 3:00 PM
+            // First Half Evaluation: Between 3:00 PM and 9:00 PM
             now.isAfter(t1500) -> {
                 newWorkStatus = if (wasInFirstHalf) AttendanceStatus.HALF_DAY else AttendanceStatus.ABSENT
 
-                newDabbaStatus = when {
-                    newWorkStatus == AttendanceStatus.ABSENT -> DabbaStatus.ABSENT
-                    recordedDabba == "P" -> DabbaStatus.PRESENT
-                    recordedDabba == "L" -> DabbaStatus.L
-                    else -> DabbaStatus.ABSENT
-                }
+                // Compulsory Rule: Work is H or A -> Dabba switches to A
+                newDabbaStatus = DabbaStatus.ABSENT
             }
 
-            // Morning Window (10:00 AM - 3:00 PM) live status
+            // Morning Window (10:00 AM - 3:00 PM) live punch status before 3:00 PM
             else -> {
                 if (recordedDabba == "P") {
                     newDabbaStatus = DabbaStatus.PRESENT
