@@ -28,6 +28,8 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.YearMonth
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import androidx.work.*
 
@@ -68,7 +70,6 @@ class MainActivity : ComponentActivity() {
                     saveSettings()
                 },
                 onUpdateDay = { day ->
-                    // Compulsory rule: If work attendance is A or H, Dabba is locked to A
                     val finalDay = if (day.workStatus == AttendanceStatus.ABSENT || day.workStatus == AttendanceStatus.HALF_DAY) {
                         day.copy(dabbaStatus = DabbaStatus.ABSENT)
                     } else {
@@ -116,10 +117,29 @@ class MainActivity : ComponentActivity() {
             val t1500 = LocalTime.of(15, 0)
             val t2100 = LocalTime.of(21, 0)
 
-            val isAlreadyPresentBefore1015 = trackerPrefs.getBoolean("${today}_present_before_1015", false)
-            val currentDabbaPref = trackerPrefs.getString("${today}_dabba", null)
+            val currentRecord = attendanceMap[today] ?: DayAttendance(dateString = today, dayOfMonth = dayNum)
+            var arrivalTimeToSave = currentRecord.arrivalTime
+            var arrivalStatusToSave = currentRecord.arrivalStatus
 
             if (isInside) {
+                // Record reaching time on first detection
+                val isArrivalLogged = trackerPrefs.getBoolean("${today}_arrival_logged", false)
+                if (!isArrivalLogged && arrivalTimeToSave.isNullOrBlank()) {
+                    val formattedNow = now.format(DateTimeFormatter.ofPattern("hh:mm a", Locale.ENGLISH))
+                    val status = if (!now.isAfter(t1015)) "P" else "L"
+
+                    trackerPrefs.edit()
+                        .putBoolean("${today}_arrival_logged", true)
+                        .putString("${today}_arrival_time", formattedNow)
+                        .putString("${today}_arrival_status", status)
+                        .apply()
+
+                    arrivalTimeToSave = formattedNow
+                    arrivalStatusToSave = status
+                }
+
+                val isAlreadyPresentBefore1015 = trackerPrefs.getBoolean("${today}_present_before_1015", false)
+                val currentDabbaPref = trackerPrefs.getString("${today}_dabba", null)
                 if (!now.isAfter(t1015)) {
                     trackerPrefs.edit()
                         .putString("${today}_dabba", "P")
@@ -143,22 +163,27 @@ class MainActivity : ComponentActivity() {
             val wasInSecondHalf = trackerPrefs.getBoolean("${today}_h2", false)
             val recordedDabba = trackerPrefs.getString("${today}_dabba", null)
 
-            val currentRecord = attendanceMap[today] ?: DayAttendance(dateString = today, dayOfMonth = dayNum)
-            if (currentRecord.isManual) return@addOnSuccessListener
+            if (currentRecord.isManual) {
+                if (arrivalTimeToSave != currentRecord.arrivalTime || arrivalStatusToSave != currentRecord.arrivalStatus) {
+                    attendanceMap[today] = currentRecord.copy(
+                        arrivalTime = arrivalTimeToSave,
+                        arrivalStatus = arrivalStatusToSave
+                    )
+                    saveAttendance()
+                }
+                return@addOnSuccessListener
+            }
 
             var newWorkStatus = currentRecord.safeWorkStatus
             var newDabbaStatus = currentRecord.safeDabbaStatus
 
             when {
-                // Second Half (After 9:00 PM)
                 now.isAfter(t2100) -> {
                     newWorkStatus = when {
                         wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
                         wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY
                         else -> AttendanceStatus.ABSENT
                     }
-
-                    // If Work is P -> restore Dabba to P or L. If Work is H or A -> Dabba MUST be A.
                     newDabbaStatus = if (newWorkStatus == AttendanceStatus.PRESENT) {
                         when (recordedDabba) {
                             "P" -> DabbaStatus.PRESENT
@@ -169,29 +194,26 @@ class MainActivity : ComponentActivity() {
                         DabbaStatus.ABSENT
                     }
                 }
-
-                // First Half (Between 3:00 PM and 9:00 PM)
                 now.isAfter(t1500) -> {
                     newWorkStatus = if (wasInFirstHalf) AttendanceStatus.HALF_DAY else AttendanceStatus.ABSENT
-                    // Compulsory Rule: Work is H or A -> Dabba switches to A
                     newDabbaStatus = DabbaStatus.ABSENT
                 }
-
-                // Morning Window before 3:00 PM
                 else -> {
                     if (recordedDabba == "P") newDabbaStatus = DabbaStatus.PRESENT
                     else if (recordedDabba == "L") newDabbaStatus = DabbaStatus.L
                 }
             }
 
-            if (newWorkStatus != currentRecord.safeWorkStatus || newDabbaStatus != currentRecord.safeDabbaStatus) {
+            if (newWorkStatus != currentRecord.safeWorkStatus || newDabbaStatus != currentRecord.safeDabbaStatus || arrivalTimeToSave != currentRecord.arrivalTime) {
                 val updatedRecord = currentRecord.copy(
                     workStatus = newWorkStatus,
                     dabbaStatus = newDabbaStatus,
                     holidayName = currentRecord.holidayName ?: "",
                     amavasyaName = currentRecord.amavasyaName ?: "",
                     salesAmount = currentRecord.salesAmount,
-                    salesBills = currentRecord.salesBills ?: ""
+                    salesBills = currentRecord.salesBills ?: "",
+                    arrivalTime = arrivalTimeToSave,
+                    arrivalStatus = arrivalStatusToSave
                 )
                 attendanceMap[today] = updatedRecord
                 saveAttendance()
@@ -308,7 +330,9 @@ class MainActivity : ComponentActivity() {
                             isAmavasya = raw.isAmavasya,
                             amavasyaName = raw.amavasyaName ?: "",
                             salesAmount = raw.salesAmount,
-                            salesBills = raw.salesBills ?: ""
+                            salesBills = raw.salesBills ?: "",
+                            arrivalTime = raw.arrivalTime ?: "",
+                            arrivalStatus = raw.arrivalStatus ?: ""
                         )
                     }
 
