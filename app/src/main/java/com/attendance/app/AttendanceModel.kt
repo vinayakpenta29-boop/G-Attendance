@@ -27,7 +27,9 @@ data class DayAttendance(
     var isAmavasya: Boolean = false,
     var amavasyaName: String? = "",
     var salesAmount: Double = 0.0,
-    var salesBills: String? = ""
+    var salesBills: String? = "",
+    var arrivalTime: String? = "",     // e.g. "10:12 AM" or "03:00 PM"
+    var arrivalStatus: String? = ""    // "P" (On Time) or "L" (Late)
 )
 
 data class SalarySettings(
