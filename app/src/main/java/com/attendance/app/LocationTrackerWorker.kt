@@ -13,6 +13,8 @@ import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class LocationTrackerWorker(
@@ -35,13 +37,8 @@ class LocationTrackerWorker(
             val t2100 = LocalTime.of(21, 0)
 
             val nextRunTime: LocalDateTime = when {
-                // Before 10:00 AM -> sleep until 10:00 AM sharp
                 time.isBefore(t1000) -> now.withHour(10).withMinute(0).withSecond(0).withNano(0)
-
-                // 10:00 AM - 10:30 AM -> track every 1 minute for Dabba punch
                 time.isBefore(t1030) -> now.plusMinutes(1).withSecond(0).withNano(0)
-
-                // 10:30 AM - 3:00 PM -> track every 30 minutes; snap to 3:00:05 PM for H1 evaluation
                 time.isBefore(t1500) -> {
                     val candidate = now.plusMinutes(30)
                     if (candidate.toLocalTime().isAfter(t1500)) {
@@ -50,8 +47,6 @@ class LocationTrackerWorker(
                         candidate
                     }
                 }
-
-                // 3:00 PM - 9:00 PM -> track every 30 minutes; snap to 9:00:05 PM for H2 evaluation
                 time.isBefore(t2100) -> {
                     val candidate = now.plusMinutes(30)
                     if (candidate.toLocalTime().isAfter(t2100)) {
@@ -60,8 +55,6 @@ class LocationTrackerWorker(
                         candidate
                     }
                 }
-
-                // After 9:00 PM -> sleep until 10:00 AM sharp tomorrow
                 else -> now.plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0)
             }
 
@@ -134,11 +127,29 @@ class LocationTrackerWorker(
         val t1500 = LocalTime.of(15, 0)
         val t2100 = LocalTime.of(21, 0)
 
-        val isAlreadyPresentBefore1015 = trackerPrefs.getBoolean("${today}_present_before_1015", false)
-        val currentDabbaPref = trackerPrefs.getString("${today}_dabba", null)
+        // --- NEW: RECORD WORKPLACE REACHING TIME (Independent Record) ---
+        var recordedArrivalTimeToSave: String? = null
+        var recordedArrivalStatusToSave: String? = null
 
         if (isInside) {
-            // Punch evaluation: arrival on or before 10:15:59 AM locks "P", after 10:15:59 AM marks "L"
+            val isArrivalLogged = trackerPrefs.getBoolean("${today}_arrival_logged", false)
+            if (!isArrivalLogged) {
+                val formattedNow = now.format(DateTimeFormatter.ofPattern("hh:mm a", Locale.ENGLISH))
+                val status = if (!now.isAfter(t1015)) "P" else "L"
+
+                trackerPrefs.edit()
+                    .putBoolean("${today}_arrival_logged", true)
+                    .putString("${today}_arrival_time", formattedNow)
+                    .putString("${today}_arrival_status", status)
+                    .apply()
+
+                recordedArrivalTimeToSave = formattedNow
+                recordedArrivalStatusToSave = status
+            }
+
+            // Punch tracking for Dabba
+            val isAlreadyPresentBefore1015 = trackerPrefs.getBoolean("${today}_present_before_1015", false)
+            val currentDabbaPref = trackerPrefs.getString("${today}_dabba", null)
             if (!now.isAfter(t1015)) {
                 trackerPrefs.edit()
                     .putString("${today}_dabba", "P")
@@ -150,11 +161,10 @@ class LocationTrackerWorker(
                     .apply()
             }
 
-            // H1 Presence (10:00 AM - 3:15 PM)
+            // Shifts Presence Tracking
             if (now.isBefore(LocalTime.of(15, 15))) {
                 trackerPrefs.edit().putBoolean("${today}_h1", true).apply()
             }
-            // H2 Presence (3:00 PM - 9:30 PM)
             if (now.isAfter(t1500) && now.isBefore(LocalTime.of(21, 30))) {
                 trackerPrefs.edit().putBoolean("${today}_h2", true).apply()
             }
@@ -174,13 +184,36 @@ class LocationTrackerWorker(
         }
 
         val existingDay = map[today] ?: DayAttendance(dateString = today, dayOfMonth = dayNum)
-        if (existingDay.isManual) return
+
+        // Keep arrival time updated in database even if attendance was manually marked
+        val finalArrivalTime = if (!existingDay.arrivalTime.isNullOrBlank()) {
+            existingDay.arrivalTime
+        } else {
+            recordedArrivalTimeToSave ?: trackerPrefs.getString("${today}_arrival_time", "")
+        }
+
+        val finalArrivalStatus = if (!existingDay.arrivalStatus.isNullOrBlank()) {
+            existingDay.arrivalStatus
+        } else {
+            recordedArrivalStatusToSave ?: trackerPrefs.getString("${today}_arrival_status", "")
+        }
+
+        if (existingDay.isManual) {
+            if (finalArrivalTime != existingDay.arrivalTime || finalArrivalStatus != existingDay.arrivalStatus) {
+                map[today] = existingDay.copy(
+                    arrivalTime = finalArrivalTime,
+                    arrivalStatus = finalArrivalStatus
+                )
+                dbPrefs.edit().putString("records", gson.toJson(map)).apply()
+            }
+            return
+        }
 
         var newWorkStatus: AttendanceStatus = existingDay.safeWorkStatus
         var newDabbaStatus: DabbaStatus = existingDay.safeDabbaStatus
 
         when {
-            // Second Half Evaluation: Immediately after 9:00 PM
+            // Second Half Evaluation (After 9:00 PM)
             now.isAfter(t2100) -> {
                 newWorkStatus = when {
                     wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
@@ -188,7 +221,6 @@ class LocationTrackerWorker(
                     else -> AttendanceStatus.ABSENT
                 }
 
-                // If Work is P -> restore Dabba to P or L. If Work is H or A -> Dabba MUST be A.
                 newDabbaStatus = if (newWorkStatus == AttendanceStatus.PRESENT) {
                     when (recordedDabba) {
                         "P" -> DabbaStatus.PRESENT
@@ -200,15 +232,13 @@ class LocationTrackerWorker(
                 }
             }
 
-            // First Half Evaluation: Between 3:00 PM and 9:00 PM
+            // First Half Evaluation (Between 3:00 PM and 9:00 PM)
             now.isAfter(t1500) -> {
                 newWorkStatus = if (wasInFirstHalf) AttendanceStatus.HALF_DAY else AttendanceStatus.ABSENT
-
-                // Compulsory Rule: Work is H or A -> Dabba switches to A
                 newDabbaStatus = DabbaStatus.ABSENT
             }
 
-            // Morning Window (10:00 AM - 3:00 PM) live punch status before 3:00 PM
+            // Morning Window (before 3:00 PM)
             else -> {
                 if (recordedDabba == "P") {
                     newDabbaStatus = DabbaStatus.PRESENT
@@ -224,7 +254,9 @@ class LocationTrackerWorker(
             holidayName = existingDay.holidayName ?: "",
             amavasyaName = existingDay.amavasyaName ?: "",
             salesAmount = existingDay.salesAmount,
-            salesBills = existingDay.salesBills ?: ""
+            salesBills = existingDay.salesBills ?: "",
+            arrivalTime = finalArrivalTime,
+            arrivalStatus = finalArrivalStatus
         )
         dbPrefs.edit().putString("records", gson.toJson(map)).apply()
     }
