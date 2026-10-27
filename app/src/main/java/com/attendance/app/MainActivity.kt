@@ -68,6 +68,7 @@ class MainActivity : ComponentActivity() {
                     saveSettings()
                 },
                 onUpdateDay = { day ->
+                    // Compulsory rule: If work attendance is A or H, Dabba is locked to A
                     val finalDay = if (day.workStatus == AttendanceStatus.ABSENT || day.workStatus == AttendanceStatus.HALF_DAY) {
                         day.copy(dabbaStatus = DabbaStatus.ABSENT)
                     } else {
@@ -119,7 +120,6 @@ class MainActivity : ComponentActivity() {
             val currentDabbaPref = trackerPrefs.getString("${today}_dabba", null)
 
             if (isInside) {
-                // If present at or before 10:15:59 AM -> lock to "P"
                 if (!now.isAfter(t1015)) {
                     trackerPrefs.edit()
                         .putString("${today}_dabba", "P")
@@ -150,28 +150,34 @@ class MainActivity : ComponentActivity() {
             var newDabbaStatus = currentRecord.safeDabbaStatus
 
             when {
+                // Second Half (After 9:00 PM)
                 now.isAfter(t2100) -> {
                     newWorkStatus = when {
                         wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
                         wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY
                         else -> AttendanceStatus.ABSENT
                     }
-                    newDabbaStatus = when {
-                        newWorkStatus == AttendanceStatus.ABSENT -> DabbaStatus.ABSENT
-                        recordedDabba == "P" -> DabbaStatus.PRESENT
-                        recordedDabba == "L" -> DabbaStatus.L
-                        else -> DabbaStatus.ABSENT
+
+                    // If Work is P -> restore Dabba to P or L. If Work is H or A -> Dabba MUST be A.
+                    newDabbaStatus = if (newWorkStatus == AttendanceStatus.PRESENT) {
+                        when (recordedDabba) {
+                            "P" -> DabbaStatus.PRESENT
+                            "L" -> DabbaStatus.L
+                            else -> DabbaStatus.ABSENT
+                        }
+                    } else {
+                        DabbaStatus.ABSENT
                     }
                 }
+
+                // First Half (Between 3:00 PM and 9:00 PM)
                 now.isAfter(t1500) -> {
                     newWorkStatus = if (wasInFirstHalf) AttendanceStatus.HALF_DAY else AttendanceStatus.ABSENT
-                    newDabbaStatus = when {
-                        newWorkStatus == AttendanceStatus.ABSENT -> DabbaStatus.ABSENT
-                        recordedDabba == "P" -> DabbaStatus.PRESENT
-                        recordedDabba == "L" -> DabbaStatus.L
-                        else -> DabbaStatus.ABSENT
-                    }
+                    // Compulsory Rule: Work is H or A -> Dabba switches to A
+                    newDabbaStatus = DabbaStatus.ABSENT
                 }
+
+                // Morning Window before 3:00 PM
                 else -> {
                     if (recordedDabba == "P") newDabbaStatus = DabbaStatus.PRESENT
                     else if (recordedDabba == "L") newDabbaStatus = DabbaStatus.L
