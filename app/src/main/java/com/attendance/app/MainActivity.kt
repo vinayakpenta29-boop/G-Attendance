@@ -137,7 +137,7 @@ class MainActivity : ComponentActivity() {
                         .putBoolean("${today}_arrival_logged", true)
                         .putString("${today}_arrival_time", formattedNow)
                         .putString("${today}_arrival_status", status)
-                        .apply()
+                        .commit()
 
                     arrivalTimeToSave = formattedNow
                     arrivalStatusToSave = status
@@ -149,18 +149,18 @@ class MainActivity : ComponentActivity() {
                     trackerPrefs.edit()
                         .putString("${today}_dabba", "P")
                         .putBoolean("${today}_present_before_1015", true)
-                        .apply()
+                        .commit()
                 } else if (currentDabbaPref != "P" && !isAlreadyPresentBefore1015) {
                     trackerPrefs.edit()
                         .putString("${today}_dabba", "L")
-                        .apply()
+                        .commit()
                 }
 
                 if (now.isBefore(LocalTime.of(15, 15))) {
-                    trackerPrefs.edit().putBoolean("${today}_h1", true).apply()
+                    trackerPrefs.edit().putBoolean("${today}_h1", true).commit()
                 }
-                if (now.isAfter(t1500) && now.isBefore(LocalTime.of(21, 30))) {
-                    trackerPrefs.edit().putBoolean("${today}_h2", true).apply()
+                if (now.isAfter(t1500) && now.isBefore(LocalTime.of(21, 35))) {
+                    trackerPrefs.edit().putBoolean("${today}_h2", true).commit()
                 }
             }
 
@@ -182,11 +182,14 @@ class MainActivity : ComponentActivity() {
             var newWorkStatus = currentRecord.safeWorkStatus
             var newDabbaStatus = currentRecord.safeDabbaStatus
 
+            val hasCompletedSecondHalf = wasInSecondHalf || (isInside && !now.isBefore(t1500))
+
             when {
-                now.isAfter(t2100) -> {
+                // 9:00 PM onwards
+                !now.isBefore(t2100) -> {
                     newWorkStatus = when {
-                        wasInFirstHalf && wasInSecondHalf -> AttendanceStatus.PRESENT
-                        wasInFirstHalf || wasInSecondHalf -> AttendanceStatus.HALF_DAY
+                        wasInFirstHalf && hasCompletedSecondHalf -> AttendanceStatus.PRESENT
+                        wasInFirstHalf || hasCompletedSecondHalf -> AttendanceStatus.HALF_DAY
                         else -> AttendanceStatus.ABSENT
                     }
                     newDabbaStatus = if (newWorkStatus == AttendanceStatus.PRESENT) {
@@ -199,7 +202,8 @@ class MainActivity : ComponentActivity() {
                         DabbaStatus.ABSENT
                     }
                 }
-                now.isAfter(t1500) -> {
+                // 3:00 PM - 8:59 PM
+                !now.isBefore(t1500) -> {
                     newWorkStatus = if (wasInFirstHalf) AttendanceStatus.HALF_DAY else AttendanceStatus.ABSENT
                     newDabbaStatus = DabbaStatus.ABSENT
                 }
@@ -282,7 +286,7 @@ class MainActivity : ComponentActivity() {
                     getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE).edit()
                         .putFloat("work_lat", loc.latitude.toFloat())
                         .putFloat("work_lng", loc.longitude.toFloat())
-                        .apply()
+                        .commit()
                     saveSettings()
                     Toast.makeText(this, "Workplace GPS locked successfully!", Toast.LENGTH_LONG).show()
                 } else {
@@ -367,7 +371,7 @@ class MainActivity : ComponentActivity() {
     private fun saveAttendance() {
         try {
             val sp = getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
-            sp.edit().putString("records", gson.toJson(attendanceMap)).apply()
+            sp.edit().putString("records", gson.toJson(attendanceMap)).commit()
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -376,7 +380,7 @@ class MainActivity : ComponentActivity() {
     private fun saveSettings() {
         try {
             val sp = getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
-            sp.edit().putString("settings", gson.toJson(settings)).apply()
+            sp.edit().putString("settings", gson.toJson(settings)).commit()
         } catch (e: Exception) {
             e.printStackTrace()
         }
