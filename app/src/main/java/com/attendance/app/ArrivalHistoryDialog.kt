@@ -48,9 +48,9 @@ fun ArrivalHistoryDialog(
     }
     val totalRecorded = onTimeCount + lateCount
 
-    // Group records into 5 boxes per row
+    // Group records into 4 boxes per row
     val chunkedRows = remember(monthRecords) {
-        monthRecords.chunked(5)
+        monthRecords.chunked(4)
     }
 
     // State for tapping on any cell to view full arrival detail
@@ -158,7 +158,7 @@ fun ArrivalHistoryDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // 3. 5-Boxes-Per-Row Grid (Without Day Headers)
+                // 3. 4-Boxes-Per-Row Grid (Without Day Headers)
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
@@ -188,8 +188,8 @@ fun ArrivalHistoryDialog(
                                     )
                                 }
 
-                                // Fill blank slots in the final row if it has fewer than 5 days
-                                repeat(5 - rowDays.size) {
+                                // Fill blank slots in the final row if it has fewer than 4 days
+                                repeat(4 - rowDays.size) {
                                     Spacer(modifier = Modifier.weight(1f))
                                 }
                             }
@@ -298,13 +298,13 @@ fun ArrivalCalendarCell(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 5.dp, horizontal = 2.dp),
+                .padding(vertical = 6.dp, horizontal = 2.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Day Number
             Text(
                 text = "${record.dayOfMonth}",
-                fontSize = 12.sp,
+                fontSize = 12.5.sp,
                 fontWeight = if (isToday || isSelected) FontWeight.ExtraBold else FontWeight.Bold,
                 color = if (isToday || isSelected) BrandPrimary else TextPrimary
             )
@@ -321,7 +321,7 @@ fun ArrivalCalendarCell(
             }
             Text(
                 text = timeDisplay,
-                fontSize = 8.sp,
+                fontSize = 8.5.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = if (!record.arrivalTime.isNullOrBlank()) TextPrimary else Color(0xFF94A3B8),
                 maxLines = 1,
@@ -342,7 +342,7 @@ fun ArrivalCalendarCell(
                             else -> Color(0xFFE2E8F0)
                         }
                     )
-                    .padding(horizontal = 6.dp, vertical = 1.dp)
+                    .padding(horizontal = 7.dp, vertical = 1.dp)
             ) {
                 Text(
                     text = when (record.arrivalStatus) {
