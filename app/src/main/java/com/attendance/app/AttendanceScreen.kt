@@ -7,6 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,6 +19,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.YearMonth
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,7 +30,8 @@ fun AttendanceScreen(
     settings: SalarySettings,
     onSaveSettings: (SalarySettings) -> Unit,
     onUpdateDay: (DayAttendance) -> Unit,
-    onSetLocation: () -> Unit
+    onSetLocation: () -> Unit,
+    onRefresh: () -> Unit = {}
 ) {
     var displayedMonth by remember { mutableStateOf(currentMonth) }
     var selectedDayForEdit by remember { mutableStateOf<DayAttendance?>(null) }
@@ -35,10 +39,14 @@ fun AttendanceScreen(
     var showHolidayDialog by remember { mutableStateOf(false) }
     var showAmavasyaDialog by remember { mutableStateOf(false) }
     var showLeavesHistoryDialog by remember { mutableStateOf(false) }
-    var showArrivalHistoryDialog by remember { mutableStateOf(false) } // New arrival dialog state
+    var showArrivalHistoryDialog by remember { mutableStateOf(false) }
     var showCalendarPdfDialog by remember { mutableStateOf(false) }
     var showGpsConfirmDialog by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
+
+    // Pull-to-refresh state
+    var isRefreshing by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
     val isLocationSet = settings.workLatitude != 0.0 && settings.workLongitude != 0.0
 
@@ -144,60 +152,73 @@ fun AttendanceScreen(
             )
         }
     ) { padding ->
-        Column(
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = {
+                isRefreshing = true
+                coroutineScope.launch {
+                    onRefresh()
+                    delay(600)
+                    isRefreshing = false
+                }
+            },
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
-            ModernMonthNavigator(
-                displayedMonth = displayedMonth,
-                onPreviousMonth = { displayedMonth = displayedMonth.minusMonths(1) },
-                onNextMonth = { displayedMonth = displayedMonth.plusMonths(1) },
-                onResetMonth = { displayedMonth = YearMonth.now() }
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
+            ) {
+                ModernMonthNavigator(
+                    displayedMonth = displayedMonth,
+                    onPreviousMonth = { displayedMonth = displayedMonth.minusMonths(1) },
+                    onNextMonth = { displayedMonth = displayedMonth.plusMonths(1) },
+                    onResetMonth = { displayedMonth = YearMonth.now() }
+                )
 
-            Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-            ModernLocationBanner(
-                isLocationSet = isLocationSet,
-                lat = settings.workLatitude,
-                lng = settings.workLongitude,
-                onSetGpsClick = { showGpsConfirmDialog = true }
-            )
+                ModernLocationBanner(
+                    isLocationSet = isLocationSet,
+                    lat = settings.workLatitude,
+                    lng = settings.workLongitude,
+                    onSetGpsClick = { showGpsConfirmDialog = true }
+                )
 
-            Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-            ModernCalendarCard(
-                currentMonth = displayedMonth,
-                attendanceMap = attendanceMap,
-                onDayClick = { selectedDayForEdit = it }
-            )
+                ModernCalendarCard(
+                    currentMonth = displayedMonth,
+                    attendanceMap = attendanceMap,
+                    onDayClick = { selectedDayForEdit = it }
+                )
 
-            Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
-            ModernSummaryDashboard(
-                currentMonth = displayedMonth,
-                attendanceMap = attendanceMap
-            )
+                ModernSummaryDashboard(
+                    currentMonth = displayedMonth,
+                    attendanceMap = attendanceMap
+                )
 
-            Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
-            ModernSalesIncentiveCard(
-                currentMonth = displayedMonth,
-                attendanceMap = attendanceMap
-            )
+                ModernSalesIncentiveCard(
+                    currentMonth = displayedMonth,
+                    attendanceMap = attendanceMap
+                )
 
-            Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
-            ModernSalaryInvoiceCard(report = report)
+                ModernSalaryInvoiceCard(report = report)
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+            }
         }
     }
 
-    // New Arrival History Dialog
     if (showArrivalHistoryDialog) {
         ArrivalHistoryDialog(
             initialMonth = displayedMonth,
