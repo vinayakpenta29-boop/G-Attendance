@@ -78,7 +78,13 @@ class MainActivity : ComponentActivity() {
                     attendanceMap[finalDay.dateString] = finalDay
                     saveAttendance()
                 },
-                onSetLocation = { setCurrentLocationAsWork() }
+                onSetLocation = { setCurrentLocationAsWork() },
+                onRefresh = {
+                    loadData()
+                    checkLiveLocationAtWorkplace()
+                    LocationTrackerWorker.scheduleNext(this@MainActivity)
+                    Toast.makeText(this@MainActivity, "Data & Location Synced", Toast.LENGTH_SHORT).show()
+                }
             )
         }
     }
@@ -122,7 +128,6 @@ class MainActivity : ComponentActivity() {
             var arrivalStatusToSave = currentRecord.arrivalStatus
 
             if (isInside) {
-                // Record reaching time on first detection
                 val isArrivalLogged = trackerPrefs.getBoolean("${today}_arrival_logged", false)
                 if (!isArrivalLogged && arrivalTimeToSave.isNullOrBlank()) {
                     val formattedNow = now.format(DateTimeFormatter.ofPattern("hh:mm a", Locale.ENGLISH))
