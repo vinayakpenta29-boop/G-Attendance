@@ -1,21 +1,30 @@
 package com.attendance.app
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.YearMonth
@@ -44,9 +53,64 @@ fun AttendanceScreen(
     var showGpsConfirmDialog by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
 
-    // Pull-to-refresh state
+    // --- Pull-to-Refresh Physics & State ---
+    val density = LocalDensity.current
+    val refreshThresholdPx = with(density) { 72.dp.toPx() }
+    val maxPullPx = with(density) { 130.dp.toPx() }
+
+    val pullOffset = remember { Animatable(0f) }
     var isRefreshing by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // When dragging upward while pulled down, collapse pull distance first
+                if (source == NestedScrollSource.Drag && available.y < 0f && pullOffset.value > 0f) {
+                    val consumedY = available.y.coerceAtLeast(-pullOffset.value)
+                    coroutineScope.launch {
+                        pullOffset.snapTo(pullOffset.value + consumedY)
+                    }
+                    return Offset(0f, consumedY)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                // When at the very top and continuing to pull down, accumulate pull distance with resistance
+                if (source == NestedScrollSource.Drag && available.y > 0f && !isRefreshing) {
+                    val newOffset = (pullOffset.value + available.y * 0.45f).coerceAtMost(maxPullPx)
+                    coroutineScope.launch {
+                        pullOffset.snapTo(newOffset)
+                    }
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (pullOffset.value >= refreshThresholdPx && !isRefreshing) {
+                    isRefreshing = true
+                    coroutineScope.launch {
+                        pullOffset.animateTo(refreshThresholdPx, tween(180))
+                        onRefresh()
+                        delay(650)
+                        isRefreshing = false
+                        pullOffset.animateTo(0f, tween(240))
+                    }
+                } else if (!isRefreshing) {
+                    coroutineScope.launch {
+                        pullOffset.animateTo(0f, tween(200))
+                    }
+                }
+                return Velocity.Zero
+            }
+        }
+    }
 
     val isLocationSet = settings.workLatitude != 0.0 && settings.workLongitude != 0.0
 
@@ -152,23 +216,18 @@ fun AttendanceScreen(
             )
         }
     ) { padding ->
-        PullToRefreshBox(
-            isRefreshing = isRefreshing,
-            onRefresh = {
-                isRefreshing = true
-                coroutineScope.launch {
-                    onRefresh()
-                    delay(600)
-                    isRefreshing = false
-                }
-            },
+        Box(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
+                .nestedScroll(nestedScrollConnection)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .graphicsLayer {
+                        translationY = pullOffset.value
+                    }
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 14.dp)
             ) {
@@ -215,6 +274,35 @@ fun AttendanceScreen(
                 ModernSalaryInvoiceCard(report = report)
 
                 Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Floating Pull-to-Refresh Spinner
+            if (pullOffset.value > 0f || isRefreshing) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 10.dp)
+                        .graphicsLayer {
+                            translationY = (pullOffset.value * 0.55f).coerceAtMost(55.dp.toPx())
+                        },
+                    shape = CircleShape,
+                    color = Color.White,
+                    shadowElevation = 6.dp,
+                    border = BorderStroke(1.dp, CardBorder)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.8.dp,
+                            color = BrandPrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
             }
         }
     }
