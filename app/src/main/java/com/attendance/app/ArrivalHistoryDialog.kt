@@ -48,13 +48,12 @@ fun ArrivalHistoryDialog(
     }
     val totalRecorded = onTimeCount + lateCount
 
-    // Calendar grid calculations
-    val daysOfWeek = listOf("M", "T", "W", "T", "F", "S", "S")
-    val firstDayOffset = displayedMonth.atDay(1).dayOfWeek.value - 1
-    val totalCells = firstDayOffset + daysInMonth
-    val totalRows = (totalCells + 6) / 7
+    // Group records into 5 boxes per row
+    val chunkedRows = remember(monthRecords) {
+        monthRecords.chunked(5)
+    }
 
-    // State for tapping on any calendar cell to view full arrival detail
+    // State for tapping on any cell to view full arrival detail
     var selectedDayRecord by remember { mutableStateOf<DayAttendance?>(null) }
 
     AlertDialog(
@@ -81,7 +80,7 @@ fun ArrivalHistoryDialog(
                     .heightIn(max = 500.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                // 1. Clean Month Navigator Row
+                // 1. Month Navigator
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = Color(0xFFF8FAFC),
@@ -159,66 +158,46 @@ fun ArrivalHistoryDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // 3. Arrival Calendar Table Card
+                // 3. 5-Boxes-Per-Row Grid (Without Day Headers)
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
                     color = CardBg,
                     border = BorderStroke(1.dp, CardBorder)
                 ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
-                        // Day of Week Header Row (M, T, W, T, F, S, S)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 6.dp)
-                        ) {
-                            daysOfWeek.forEach { dayName ->
-                                Text(
-                                    text = dayName,
-                                    modifier = Modifier.weight(1f),
-                                    textAlign = TextAlign.Center,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.5.sp,
-                                    color = TextSecondary
-                                )
-                            }
-                        }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp)
+                    ) {
+                        chunkedRows.forEach { rowDays ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                rowDays.forEach { record ->
+                                    val isToday = (record.dateString == todayString)
+                                    val isSelected = (selectedDayRecord?.dateString == record.dateString)
 
-                        // Calendar Cells
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            for (row in 0 until totalRows) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    for (col in 0 until 7) {
-                                        val cellIndex = row * 7 + col
-                                        if (cellIndex < firstDayOffset || cellIndex >= totalCells) {
-                                            Spacer(modifier = Modifier.weight(1f))
-                                        } else {
-                                            val dayNum = cellIndex - firstDayOffset + 1
-                                            val dateStr = displayedMonth.atDay(dayNum).toString()
-                                            val record = attendanceMap[dateStr] ?: DayAttendance(dateString = dateStr, dayOfMonth = dayNum)
-                                            val isToday = (dateStr == todayString)
-                                            val isSelected = (selectedDayRecord?.dateString == dateStr)
+                                    ArrivalCalendarCell(
+                                        record = record,
+                                        isToday = isToday,
+                                        isSelected = isSelected,
+                                        onClick = { selectedDayRecord = record },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
 
-                                            ArrivalCalendarCell(
-                                                record = record,
-                                                isToday = isToday,
-                                                isSelected = isSelected,
-                                                onClick = { selectedDayRecord = record },
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                        }
-                                    }
+                                // Fill blank slots in the final row if it has fewer than 5 days
+                                repeat(5 - rowDays.size) {
+                                    Spacer(modifier = Modifier.weight(1f))
                                 }
                             }
                         }
                     }
                 }
 
-                // 4. Tap-to-Inspect Detail Card (shows full detail when a date cell is tapped)
+                // 4. Tap-to-Inspect Detail Card
                 if (selectedDayRecord != null) {
                     val rec = selectedDayRecord!!
                     val hasTime = !rec.arrivalTime.isNullOrBlank()
@@ -310,39 +289,39 @@ fun ArrivalCalendarCell(
 
     Surface(
         modifier = modifier
-            .padding(2.dp)
+            .padding(2.5.dp)
             .clickable { onClick() },
-        shape = RoundedCornerShape(7.dp),
+        shape = RoundedCornerShape(8.dp),
         color = bgColor,
         border = BorderStroke(if (isSelected || isToday) 1.6.dp else 1.dp, borderColor)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp, horizontal = 1.dp),
+                .padding(vertical = 5.dp, horizontal = 2.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Day Number
             Text(
                 text = "${record.dayOfMonth}",
-                fontSize = 11.5.sp,
+                fontSize = 12.sp,
                 fontWeight = if (isToday || isSelected) FontWeight.ExtraBold else FontWeight.Bold,
                 color = if (isToday || isSelected) BrandPrimary else TextPrimary
             )
 
-            Spacer(modifier = Modifier.height(1.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
-            // Arrival Time String (e.g. "10:29A" or "--")
+            // Arrival Time String (e.g. "10:29 AM" or "--")
             val timeDisplay = remember(record.arrivalTime) {
                 if (record.arrivalTime.isNullOrBlank()) {
                     "--"
                 } else {
-                    record.arrivalTime!!.trim().replace(" ", "")
+                    record.arrivalTime!!.trim()
                 }
             }
             Text(
                 text = timeDisplay,
-                fontSize = 6.8.sp,
+                fontSize = 8.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = if (!record.arrivalTime.isNullOrBlank()) TextPrimary else Color(0xFF94A3B8),
                 maxLines = 1,
@@ -350,7 +329,7 @@ fun ArrivalCalendarCell(
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(3.dp))
 
             // Status Pill (P, L, or -)
             Row(
@@ -363,7 +342,7 @@ fun ArrivalCalendarCell(
                             else -> Color(0xFFE2E8F0)
                         }
                     )
-                    .padding(horizontal = 4.dp, vertical = 0.5.dp)
+                    .padding(horizontal = 6.dp, vertical = 1.dp)
             ) {
                 Text(
                     text = when (record.arrivalStatus) {
@@ -371,7 +350,7 @@ fun ArrivalCalendarCell(
                         "L" -> "L"
                         else -> "-"
                     },
-                    fontSize = 7.5.sp,
+                    fontSize = 8.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (record.arrivalStatus.isNullOrBlank()) Color.DarkGray else Color.White
                 )
