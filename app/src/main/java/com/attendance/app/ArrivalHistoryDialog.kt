@@ -2,6 +2,7 @@ package com.attendance.app
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,8 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
@@ -27,6 +30,7 @@ fun ArrivalHistoryDialog(
 ) {
     var displayedMonth by remember { mutableStateOf(initialMonth) }
     val daysInMonth = displayedMonth.lengthOfMonth()
+    val todayString = remember { LocalDate.now().toString() }
 
     // Aggregate monthly arrival metrics
     val monthRecords = remember(displayedMonth, attendanceMap.values.toList()) {
@@ -44,70 +48,85 @@ fun ArrivalHistoryDialog(
     }
     val totalRecorded = onTimeCount + lateCount
 
+    // Calendar grid calculations
+    val daysOfWeek = listOf("M", "T", "W", "T", "F", "S", "S")
+    val firstDayOffset = displayedMonth.atDay(1).dayOfWeek.value - 1
+    val totalCells = firstDayOffset + daysInMonth
+    val totalRows = (totalCells + 6) / 7
+
+    // State for tapping on any calendar cell to view full arrival detail
+    var selectedDayRecord by remember { mutableStateOf<DayAttendance?>(null) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "Daily Arrival Log",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = "Independent Workplace Punch Record",
-                        fontSize = 11.sp,
-                        color = TextSecondary
-                    )
-                }
-
-                // Month Switcher (‹ Month Year ›)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    IconButton(
-                        onClick = { displayedMonth = displayedMonth.minusMonths(1) },
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFFF1F5F9))
-                    ) {
-                        Text("‹", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    }
-
-                    Text(
-                        text = displayedMonth.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH) + " " + displayedMonth.year,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = BrandPrimary
-                    )
-
-                    IconButton(
-                        onClick = { displayedMonth = displayedMonth.plusMonths(1) },
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFFF1F5F9))
-                    ) {
-                        Text("›", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    }
-                }
+            Column {
+                Text(
+                    text = "Daily Arrival Log",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Independent Workplace Punch Record",
+                    fontSize = 11.5.sp,
+                    color = TextSecondary
+                )
             }
         },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 440.dp)
+                    .heightIn(max = 500.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                // Monthly Summary Overview Card
+                // 1. Clean Month Navigator Row
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFFF8FAFC),
+                    border = BorderStroke(1.dp, CardBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = {
+                                displayedMonth = displayedMonth.minusMonths(1)
+                                selectedDayRecord = null
+                            },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Text("‹", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        }
+
+                        Text(
+                            text = "${displayedMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)} ${displayedMonth.year}",
+                            fontSize = 14.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BrandPrimary
+                        )
+
+                        IconButton(
+                            onClick = {
+                                displayedMonth = displayedMonth.plusMonths(1)
+                                selectedDayRecord = null
+                            },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Text("›", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // 2. Summary Overview Card
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = Color(0xFFF8FAFC),
@@ -117,51 +136,110 @@ fun ArrivalHistoryDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                            .padding(horizontal = 12.dp, vertical = 9.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Total Logged", fontSize = 10.5.sp, color = TextSecondary, fontWeight = FontWeight.Medium)
-                            Text("$totalRecorded Days", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+                            Text("$totalRecorded Days", fontSize = 13.5.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
                         }
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("On Time (P)", fontSize = 10.5.sp, color = TextSecondary, fontWeight = FontWeight.Medium)
-                            Text("$onTimeCount Days", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = SuccessGreen)
+                            Text("$onTimeCount Days", fontSize = 13.5.sp, fontWeight = FontWeight.ExtraBold, color = SuccessGreen)
                         }
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Late (L)", fontSize = 10.5.sp, color = TextSecondary, fontWeight = FontWeight.Medium)
-                            Text("$lateCount Days", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = WarningAmber)
+                            Text("$lateCount Days", fontSize = 13.5.sp, fontWeight = FontWeight.ExtraBold, color = WarningAmber)
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Text(
-                    text = "Day-Wise Arrival Records",
-                    fontSize = 12.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
+                // 3. Arrival Calendar Table Card
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = CardBg,
+                    border = BorderStroke(1.dp, CardBorder)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        // Day of Week Header Row (M, T, W, T, F, S, S)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp)
+                        ) {
+                            daysOfWeek.forEach { dayName ->
+                                Text(
+                                    text = dayName,
+                                    modifier = Modifier.weight(1f),
+                                    textAlign = TextAlign.Center,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.5.sp,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                        // Calendar Cells
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            for (row in 0 until totalRows) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    for (col in 0 until 7) {
+                                        val cellIndex = row * 7 + col
+                                        if (cellIndex < firstDayOffset || cellIndex >= totalCells) {
+                                            Spacer(modifier = Modifier.weight(1f))
+                                        } else {
+                                            val dayNum = cellIndex - firstDayOffset + 1
+                                            val dateStr = displayedMonth.atDay(dayNum).toString()
+                                            val record = attendanceMap[dateStr] ?: DayAttendance(dateString = dateStr, dayOfMonth = dayNum)
+                                            val isToday = (dateStr == todayString)
+                                            val isSelected = (selectedDayRecord?.dateString == dateStr)
 
-                // Day-by-day listings
-                monthRecords.forEach { record ->
-                    val dayDate = displayedMonth.atDay(record.dayOfMonth)
-                    val dayOfWeekStr = dayDate.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)
-                    val hasTime = !record.arrivalTime.isNullOrBlank()
+                                            ArrivalCalendarCell(
+                                                record = record,
+                                                isToday = isToday,
+                                                isSelected = isSelected,
+                                                onClick = { selectedDayRecord = record },
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
+                // 4. Tap-to-Inspect Detail Card (shows full detail when a date cell is tapped)
+                if (selectedDayRecord != null) {
+                    val rec = selectedDayRecord!!
+                    val hasTime = !rec.arrivalTime.isNullOrBlank()
+
+                    Spacer(modifier = Modifier.height(10.dp))
                     Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (hasTime) Color.White else Color(0xFFFAFAFA),
-                        border = BorderStroke(0.8.dp, CardBorder),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 2.5.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        color = when (rec.arrivalStatus) {
+                            "P" -> SuccessBg
+                            "L" -> WarningBg
+                            else -> Color(0xFFF1F5F9)
+                        },
+                        border = BorderStroke(
+                            1.dp,
+                            when (rec.arrivalStatus) {
+                                "P" -> Color(0xFFA7F3D0)
+                                "L" -> Color(0xFFFDE68A)
+                                else -> CardBorder
+                            }
+                        ),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
                             modifier = Modifier
@@ -170,65 +248,34 @@ fun ArrivalHistoryDialog(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column {
                                 Text(
-                                    text = "Day ${record.dayOfMonth}",
-                                    fontSize = 13.sp,
+                                    text = "Day ${rec.dayOfMonth} Arrival Details",
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = TextPrimary
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "($dayOfWeekStr)",
+                                    text = if (hasTime) "Reaching Time: ${rec.arrivalTime}" else "Reaching Time: Not Detected",
                                     fontSize = 11.5.sp,
                                     color = TextSecondary
                                 )
                             }
 
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = if (hasTime) record.arrivalTime!! else "Not Detected",
-                                    fontSize = 12.sp,
-                                    fontWeight = if (hasTime) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (hasTime) TextPrimary else TextSecondary
-                                )
-
-                                Spacer(modifier = Modifier.width(8.dp))
-
-                                // Status Pill: P (Green), L (Amber), or - (Gray)
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = when (record.arrivalStatus) {
-                                        "P" -> SuccessBg
-                                        "L" -> WarningBg
-                                        else -> Color(0xFFF1F5F9)
-                                    },
-                                    border = BorderStroke(
-                                        0.8.dp,
-                                        when (record.arrivalStatus) {
-                                            "P" -> Color(0xFFA7F3D0)
-                                            "L" -> Color(0xFFFDE68A)
-                                            else -> CardBorder
-                                        }
-                                    )
-                                ) {
-                                    Text(
-                                        text = when (record.arrivalStatus) {
-                                            "P" -> "P (On Time)"
-                                            "L" -> "L (Late)"
-                                            else -> "-"
-                                        },
-                                        fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = when (record.arrivalStatus) {
-                                            "P" -> Color(0xFF047857)
-                                            "L" -> Color(0xFFB45309)
-                                            else -> TextSecondary
-                                        },
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
+                            Text(
+                                text = when (rec.arrivalStatus) {
+                                    "P" -> "On Time (P)"
+                                    "L" -> "Late (L)"
+                                    else -> "No Record"
+                                },
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = when (rec.arrivalStatus) {
+                                    "P" -> Color(0xFF047857)
+                                    "L" -> Color(0xFFB45309)
+                                    else -> TextSecondary
                                 }
-                            }
+                            )
                         }
                     }
                 }
@@ -243,4 +290,92 @@ fun ArrivalHistoryDialog(
             }
         }
     )
+}
+
+@Composable
+fun ArrivalCalendarCell(
+    record: DayAttendance,
+    isToday: Boolean,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val (bgColor, borderColor) = when {
+        isSelected -> Pair(Color(0xFFEEF2FF), BrandPrimary)
+        isToday -> Pair(Color(0xFFEEF2FF), BrandSecondary)
+        record.arrivalStatus == "P" -> Pair(Color(0xFFF0FDF4), Color(0xFFBBF7D0))
+        record.arrivalStatus == "L" -> Pair(Color(0xFFFFFBEB), Color(0xFFFDE68A))
+        else -> Pair(Color(0xFFFAFAFA), Color(0xFFF1F5F9))
+    }
+
+    Surface(
+        modifier = modifier
+            .padding(2.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(7.dp),
+        color = bgColor,
+        border = BorderStroke(if (isSelected || isToday) 1.6.dp else 1.dp, borderColor)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp, horizontal = 1.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Day Number
+            Text(
+                text = "${record.dayOfMonth}",
+                fontSize = 11.5.sp,
+                fontWeight = if (isToday || isSelected) FontWeight.ExtraBold else FontWeight.Bold,
+                color = if (isToday || isSelected) BrandPrimary else TextPrimary
+            )
+
+            Spacer(modifier = Modifier.height(1.dp))
+
+            // Arrival Time String (e.g. "10:29A" or "--")
+            val timeDisplay = remember(record.arrivalTime) {
+                if (record.arrivalTime.isNullOrBlank()) {
+                    "--"
+                } else {
+                    record.arrivalTime!!.trim().replace(" ", "")
+                }
+            }
+            Text(
+                text = timeDisplay,
+                fontSize = 6.8.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (!record.arrivalTime.isNullOrBlank()) TextPrimary else Color(0xFF94A3B8),
+                maxLines = 1,
+                softWrap = false,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            // Status Pill (P, L, or -)
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(
+                        when (record.arrivalStatus) {
+                            "P" -> SuccessGreen
+                            "L" -> WarningAmber
+                            else -> Color(0xFFE2E8F0)
+                        }
+                    )
+                    .padding(horizontal = 4.dp, vertical = 0.5.dp)
+            ) {
+                Text(
+                    text = when (record.arrivalStatus) {
+                        "P" -> "P"
+                        "L" -> "L"
+                        else -> "-"
+                    },
+                    fontSize = 7.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (record.arrivalStatus.isNullOrBlank()) Color.DarkGray else Color.White
+                )
+            }
+        }
+    }
 }
