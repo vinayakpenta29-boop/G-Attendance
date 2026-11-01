@@ -295,7 +295,7 @@ class MainActivity : ComponentActivity() {
             }
     }
 
-    private fun requestPermissions() {
+        private fun requestPermissions() {
         val permissionsList = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION
@@ -306,7 +306,15 @@ class MainActivity : ComponentActivity() {
         }
 
         permissionLauncher.launch(permissionsList.toTypedArray())
+
+        // Request background location on Android 10 (Q) and above
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                registerForActivityResult(ActivityResultContracts.RequestPermission()) {}.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            }
+        }
     }
+
 
     private fun loadData() {
         try {
