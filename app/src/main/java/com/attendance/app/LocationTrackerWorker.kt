@@ -1,7 +1,13 @@
 package com.attendance.app
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
+import android.content.pm.ServiceInfo
 import android.location.Location
+import android.os.Build
+import androidx.core.app.NotificationCompat
 import androidx.work.*
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -26,6 +32,8 @@ class LocationTrackerWorker(
 
     companion object {
         const val WORK_NAME = "location_tracker_work"
+        private const val NOTIFICATION_CHANNEL_ID = "attendance_tracker_channel"
+        private const val NOTIFICATION_ID = 1001
 
         fun scheduleNext(context: Context) {
             val now = LocalDateTime.now()
@@ -38,13 +46,8 @@ class LocationTrackerWorker(
             val t2130 = LocalTime.of(21, 30)
 
             val nextRunTime: LocalDateTime = when {
-                // Before 10:00 AM -> wait until 10:00 AM sharp
                 time.isBefore(t1000) -> now.withHour(10).withMinute(0).withSecond(0).withNano(0)
-
-                // 10:00 AM - 10:30 AM -> track every 1 minute for Dabba punch
                 time.isBefore(t1030) -> now.plusMinutes(1).withSecond(0).withNano(0)
-
-                // 10:30 AM - 3:00 PM -> track every 30 minutes; snap to 3:00:05 PM for H1 evaluation
                 time.isBefore(t1500) -> {
                     val candidate = now.plusMinutes(30)
                     if (candidate.toLocalTime().isAfter(t1500)) {
@@ -53,8 +56,6 @@ class LocationTrackerWorker(
                         candidate
                     }
                 }
-
-                // 3:00 PM - 9:00 PM -> track every 30 minutes; snap to 9:00:05 PM for H2 evaluation
                 time.isBefore(t2100) -> {
                     val candidate = now.plusMinutes(30)
                     if (candidate.toLocalTime().isAfter(t2100)) {
@@ -63,11 +64,7 @@ class LocationTrackerWorker(
                         candidate
                     }
                 }
-
-                // 9:00 PM - 9:30 PM -> Keep running every 10 minutes to guarantee full-day attendance is recorded
                 time.isBefore(t2130) -> now.plusMinutes(10).withSecond(0).withNano(0)
-
-                // After 9:30 PM -> Sleep until 10:00 AM sharp tomorrow
                 else -> now.plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0)
             }
 
@@ -75,6 +72,7 @@ class LocationTrackerWorker(
 
             val request = OneTimeWorkRequestBuilder<LocationTrackerWorker>()
                 .setInitialDelay(delayMillis, TimeUnit.MILLISECONDS)
+                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
@@ -92,6 +90,10 @@ class LocationTrackerWorker(
 
     override suspend fun doWork(): Result {
         try {
+            // Elevate to Foreground Service so Android won't freeze GPS when screen is off
+            val foregroundInfo = createForegroundInfo()
+            setForeground(foregroundInfo)
+
             checkLocationAndUpdateAttendance()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -101,13 +103,45 @@ class LocationTrackerWorker(
         return Result.success()
     }
 
+    private fun createForegroundInfo(): ForegroundInfo {
+        createNotificationChannel()
+        val notification: Notification = NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
+            .setContentTitle("G-Attendance Active")
+            .setContentText("Monitoring workplace presence in background")
+            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        } else {
+            ForegroundInfo(NOTIFICATION_ID, notification)
+        }
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "Attendance Background Tracking",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Keeps attendance geofence tracking active during work hours"
+                enableVibration(false)
+                setSound(null, null)
+            }
+            val manager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(channel)
+        }
+    }
+
     private fun checkLocationAndUpdateAttendance() {
         val prefs = applicationContext.getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
         var targetLat = prefs.getFloat("work_lat", 0f).toDouble()
         var targetLng = prefs.getFloat("work_lng", 0f).toDouble()
         var radius = prefs.getFloat("work_radius", 150f)
 
-        // Reliable fallback to attendance_db settings if attendance_prefs is unpopulated
         if (targetLat == 0.0 && targetLng == 0.0) {
             val dbPrefs = applicationContext.getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
             val setJson = dbPrefs.getString("settings", null)
@@ -129,7 +163,6 @@ class LocationTrackerWorker(
 
         val fusedClient = LocationServices.getFusedLocationProviderClient(applicationContext)
 
-        // Resilient location fetching with timeout to prevent hanging in background
         val location: Location? = try {
             val cts = CancellationTokenSource()
             val task = fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
@@ -146,7 +179,7 @@ class LocationTrackerWorker(
         val isInside = if (location != null) {
             val results = FloatArray(1)
             Location.distanceBetween(location.latitude, location.longitude, targetLat, targetLng, results)
-            val tolerance = location.accuracy.coerceAtMost(50f)
+            val tolerance = location.accuracy.coerceAtMost(60f)
             results[0] <= (radius + tolerance)
         } else {
             false
@@ -168,7 +201,7 @@ class LocationTrackerWorker(
         var recordedArrivalStatusToSave: String? = null
 
         if (isInside) {
-            // 1. Record daily reaching time log on first detection
+            // First detection of the day (e.g., 10:26 AM)
             val isArrivalLogged = trackerPrefs.getBoolean("${today}_arrival_logged", false)
             if (!isArrivalLogged) {
                 val formattedNow = now.format(DateTimeFormatter.ofPattern("hh:mm a", Locale.ENGLISH))
@@ -184,7 +217,6 @@ class LocationTrackerWorker(
                 recordedArrivalStatusToSave = status
             }
 
-            // 2. Dabba Punch tracking
             val isAlreadyPresentBefore1015 = trackerPrefs.getBoolean("${today}_present_before_1015", false)
             val currentDabbaPref = trackerPrefs.getString("${today}_dabba", null)
             if (!now.isAfter(t1015)) {
@@ -198,7 +230,6 @@ class LocationTrackerWorker(
                     .commit()
             }
 
-            // 3. Shift Presence
             if (now.isBefore(LocalTime.of(15, 15))) {
                 trackerPrefs.edit().putBoolean("${today}_h1", true).commit()
             }
@@ -248,11 +279,9 @@ class LocationTrackerWorker(
         var newWorkStatus: AttendanceStatus = existingDay.safeWorkStatus
         var newDabbaStatus: DabbaStatus = existingDay.safeDabbaStatus
 
-        // If currently inside at or after 9:00 PM, Second Half is validated
         val hasCompletedSecondHalf = wasInSecondHalf || (isInside && !now.isBefore(t1500))
 
         when {
-            // Second Half Evaluation: 9:00:00 PM onwards (or anytime at/after 9 PM)
             !now.isBefore(t2100) -> {
                 newWorkStatus = when {
                     wasInFirstHalf && hasCompletedSecondHalf -> AttendanceStatus.PRESENT
@@ -260,7 +289,6 @@ class LocationTrackerWorker(
                     else -> AttendanceStatus.ABSENT
                 }
 
-                // If Work is P -> restore morning punch (P or L). If H or A -> Dabba is strictly A.
                 newDabbaStatus = if (newWorkStatus == AttendanceStatus.PRESENT) {
                     when (recordedDabba) {
                         "P" -> DabbaStatus.PRESENT
@@ -272,14 +300,11 @@ class LocationTrackerWorker(
                 }
             }
 
-            // First Half Evaluation: Between 3:00 PM and 8:59 PM
             !now.isBefore(t1500) -> {
                 newWorkStatus = if (wasInFirstHalf) AttendanceStatus.HALF_DAY else AttendanceStatus.ABSENT
-                // While work is H or A -> Dabba is compulsory A
                 newDabbaStatus = DabbaStatus.ABSENT
             }
 
-            // Morning Window (before 3:00 PM) live display
             else -> {
                 if (recordedDabba == "P") {
                     newDabbaStatus = DabbaStatus.PRESENT
@@ -299,7 +324,6 @@ class LocationTrackerWorker(
             arrivalTime = finalArrivalTime,
             arrivalStatus = finalArrivalStatus
         )
-        // Use synchronous commit so data immediately flushes to disk in background
         dbPrefs.edit().putString("records", gson.toJson(map)).commit()
     }
 }
