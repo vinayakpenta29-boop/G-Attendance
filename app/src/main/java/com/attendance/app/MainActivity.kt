@@ -1,8 +1,6 @@
 package com.attendance.app
 
 import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
@@ -24,15 +22,11 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.lang.reflect.Type
-import java.time.Duration
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.concurrent.TimeUnit
-import androidx.work.*
 
 class MainActivity : ComponentActivity() {
 
@@ -53,12 +47,11 @@ class MainActivity : ComponentActivity() {
                 e.printStackTrace()
             }
         }
-        scheduleDailySalesReminder()
+        SalesReminderReceiver.scheduleExact10PMRminder(this)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        createSalesNotificationChannel()
         loadData()
         requestPermissions()
 
@@ -69,7 +62,8 @@ class MainActivity : ComponentActivity() {
             e.printStackTrace()
         }
 
-        scheduleDailySalesReminder()
+        // Schedule exact 10 PM alarm
+        SalesReminderReceiver.scheduleExact10PMRminder(this)
 
         setContent {
             val currentMonth = remember { YearMonth.now() }
@@ -111,6 +105,7 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        SalesReminderReceiver.scheduleExact10PMRminder(this)
     }
 
     private fun checkLiveLocationAtWorkplace() {
@@ -243,47 +238,6 @@ class MainActivity : ComponentActivity() {
                 saveAttendance()
             }
         }
-    }
-
-    private fun createSalesNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                SalesReminderWorker.CHANNEL_ID,
-                "Daily Sales Reminder",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Reminds you every day at 10 PM to log today's sales."
-                enableVibration(true)
-            }
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
-        }
-    }
-
-    private fun scheduleDailySalesReminder() {
-        val now = LocalDateTime.now()
-        var target10PM = now.withHour(22).withMinute(0).withSecond(0).withNano(0)
-
-        if (now.isAfter(target10PM)) {
-            target10PM = target10PM.plusDays(1)
-        }
-
-        val initialDelayMillis = Duration.between(now, target10PM).toMillis()
-
-        val reminderRequest = PeriodicWorkRequestBuilder<SalesReminderWorker>(24, TimeUnit.HOURS)
-            .setInitialDelay(initialDelayMillis, TimeUnit.MILLISECONDS)
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
-                    .build()
-            )
-            .build()
-
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "daily_sales_reminder_10pm",
-            ExistingPeriodicWorkPolicy.UPDATE,
-            reminderRequest
-        )
     }
 
     private fun setCurrentLocationAsWork() {
