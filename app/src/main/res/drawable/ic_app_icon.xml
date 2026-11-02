@@ -5,30 +5,30 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Rounded Background Badge -->
+    <!-- Crimson Background Rounded Card -->
     <path
         android:fillColor="#BE123C"
         android:pathData="M18,0 L90,0 A18,18 0 0 1 108,18 L108,90 A18,18 0 0 1 90,108 L18,108 A18,18 0 0 1 0,90 L0,18 A18,18 0 0 1 18,0 Z" />
 
-    <!-- Corner Contrast Shadow -->
+    <!-- Contrast Shadow -->
     <path
         android:fillColor="#980F30"
         android:pathData="M0,0 L108,108 L108,0 Z" />
 
-    <!-- Calendar Base Sheet (White) -->
+    <!-- Calendar Card Base Sheet -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M28,32 H80 A6,6 0 0 1 86,38 V78 A6,6 0 0 1 80,84 H28 A6,6 0 0 1 22,78 V38 A6,6 0 0 1 28,32 Z" />
+        android:pathData="M28,30 H80 A6,6 0 0 1 86,36 V80 A6,6 0 0 1 80,86 H28 A6,6 0 0 1 22,80 V36 A6,6 0 0 1 28,30 Z" />
 
-    <!-- Calendar Top Bar (Crimson) -->
+    <!-- Calendar Top Bar -->
     <path
         android:fillColor="#BE123C"
-        android:pathData="M28,32 H80 A6,6 0 0 1 86,38 V44 H22 V38 A6,6 0 0 1 28,32 Z" />
+        android:pathData="M28,30 H80 A6,6 0 0 1 86,36 V42 H22 V36 A6,6 0 0 1 28,30 Z" />
 
-    <!-- Left & Right Hanging Pins -->
+    <!-- Hanging Binder Pins -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M34,26 A3,3 0 0 1 37,29 V34 A3,3 0 0 1 31,34 V29 A3,3 0 0 1 34,26 Z M74,26 A3,3 0 0 1 77,29 V34 A3,3 0 0 1 71,34 V29 A3,3 0 0 1 74,26 Z" />
+        android:pathData="M34,24 A3,3 0 0 1 37,27 V32 A3,3 0 0 1 31,32 V27 A3,3 0 0 1 34,24 Z M74,24 A3,3 0 0 1 77,27 V32 A3,3 0 0 1 71,32 V27 A3,3 0 0 1 74,24 Z" />
 
     <!-- Verified Attendance Checkmark -->
     <path
