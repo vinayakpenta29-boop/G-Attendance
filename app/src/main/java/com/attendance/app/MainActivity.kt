@@ -42,9 +42,15 @@ class MainActivity : ComponentActivity() {
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
-            LocationTrackerWorker.scheduleNext(this)
-            checkLiveLocationAtWorkplace()
+        if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        ) {
+            try {
+                LocationTrackerWorker.scheduleNext(this)
+                checkLiveLocationAtWorkplace()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
         scheduleDailySalesReminder()
     }
@@ -54,8 +60,14 @@ class MainActivity : ComponentActivity() {
         createSalesNotificationChannel()
         loadData()
         requestPermissions()
-        LocationTrackerWorker.scheduleNext(this)
-        checkLiveLocationAtWorkplace()
+        
+        try {
+            LocationTrackerWorker.scheduleNext(this)
+            checkLiveLocationAtWorkplace()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
         scheduleDailySalesReminder()
 
         setContent {
@@ -92,8 +104,12 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         loadData()
-        LocationTrackerWorker.scheduleNext(this)
-        checkLiveLocationAtWorkplace()
+        try {
+            LocationTrackerWorker.scheduleNext(this)
+            checkLiveLocationAtWorkplace()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun checkLiveLocationAtWorkplace() {
@@ -111,7 +127,7 @@ class MainActivity : ComponentActivity() {
             val results = FloatArray(1)
             Location.distanceBetween(location.latitude, location.longitude, settings.workLatitude, settings.workLongitude, results)
 
-            val tolerance = location.accuracy.coerceAtMost(50f)
+            val tolerance = location.accuracy.coerceAtMost(60f)
             val isInside = results[0] <= (settings.geofenceRadiusMeters + tolerance)
 
             val trackerPrefs = getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
@@ -185,7 +201,6 @@ class MainActivity : ComponentActivity() {
             val hasCompletedSecondHalf = wasInSecondHalf || (isInside && !now.isBefore(t1500))
 
             when {
-                // 9:00 PM onwards
                 !now.isBefore(t2100) -> {
                     newWorkStatus = when {
                         wasInFirstHalf && hasCompletedSecondHalf -> AttendanceStatus.PRESENT
@@ -202,7 +217,6 @@ class MainActivity : ComponentActivity() {
                         DabbaStatus.ABSENT
                     }
                 }
-                // 3:00 PM - 8:59 PM
                 !now.isBefore(t1500) -> {
                     newWorkStatus = if (wasInFirstHalf) AttendanceStatus.HALF_DAY else AttendanceStatus.ABSENT
                     newDabbaStatus = DabbaStatus.ABSENT
@@ -295,7 +309,7 @@ class MainActivity : ComponentActivity() {
             }
     }
 
-        private fun requestPermissions() {
+    private fun requestPermissions() {
         val permissionsList = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION
@@ -306,22 +320,14 @@ class MainActivity : ComponentActivity() {
         }
 
         permissionLauncher.launch(permissionsList.toTypedArray())
-
-        // Request background location on Android 10 (Q) and above
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                registerForActivityResult(ActivityResultContracts.RequestPermission()) {}.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-            }
-        }
     }
-
 
     private fun loadData() {
         try {
             val sp = getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
             val json = sp.getString("records", null)
             if (!json.isNullOrEmpty()) {
-                val type = object : TypeToken<Map<String, DayAttendance>>() {}.type
+                val type = object : TypeToken>() {}.type
                 val map: Map<String, DayAttendance>? = gson.fromJson(json, type)
 
                 if (map != null) {
