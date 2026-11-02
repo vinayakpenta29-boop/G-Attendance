@@ -72,7 +72,6 @@ class LocationTrackerWorker(
 
             val request = OneTimeWorkRequestBuilder<LocationTrackerWorker>()
                 .setInitialDelay(delayMillis, TimeUnit.MILLISECONDS)
-                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
@@ -88,11 +87,19 @@ class LocationTrackerWorker(
         }
     }
 
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        return createForegroundInfo()
+    }
+
     override suspend fun doWork(): Result {
         try {
-            // Elevate to Foreground Service so Android won't freeze GPS when screen is off
-            val foregroundInfo = createForegroundInfo()
-            setForeground(foregroundInfo)
+            // Keep background worker prioritized during location query
+            try {
+                val foregroundInfo = createForegroundInfo()
+                setForeground(foregroundInfo)
+            } catch (e: Exception) {
+                // If notification permission is pending, proceed without crashing
+            }
 
             checkLocationAndUpdateAttendance()
         } catch (e: Exception) {
@@ -201,7 +208,6 @@ class LocationTrackerWorker(
         var recordedArrivalStatusToSave: String? = null
 
         if (isInside) {
-            // First detection of the day (e.g., 10:26 AM)
             val isArrivalLogged = trackerPrefs.getBoolean("${today}_arrival_logged", false)
             if (!isArrivalLogged) {
                 val formattedNow = now.format(DateTimeFormatter.ofPattern("hh:mm a", Locale.ENGLISH))
