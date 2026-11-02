@@ -23,6 +23,7 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import java.lang.reflect.Type
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -60,7 +61,7 @@ class MainActivity : ComponentActivity() {
         createSalesNotificationChannel()
         loadData()
         requestPermissions()
-        
+
         try {
             LocationTrackerWorker.scheduleNext(this)
             checkLiveLocationAtWorkplace()
@@ -327,8 +328,8 @@ class MainActivity : ComponentActivity() {
             val sp = getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
             val json = sp.getString("records", null)
             if (!json.isNullOrEmpty()) {
-                val type = object : TypeToken>() {}.type
-                val map: Map<String, DayAttendance>? = gson.fromJson(json, type)
+                val type: Type = object : TypeToken<MutableMap<String, DayAttendance>>() {}.type
+                val map: MutableMap<String, DayAttendance>? = gson.fromJson(json, type)
 
                 if (map != null) {
                     val sanitized = mutableMapOf<String, DayAttendance>()
