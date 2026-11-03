@@ -1,8 +1,10 @@
 package com.attendance.app
 
+import android.content.Context
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -15,13 +17,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Velocity
@@ -42,6 +47,12 @@ fun AttendanceScreen(
     onSetLocation: () -> Unit,
     onRefresh: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val uiPrefs = remember { context.getSharedPreferences("calendar_ui_prefs", Context.MODE_PRIVATE) }
+    var showGridLines by remember {
+        mutableStateOf(uiPrefs.getBoolean("show_grid_lines", false))
+    }
+
     var displayedMonth by remember { mutableStateOf(currentMonth) }
     var selectedDayForEdit by remember { mutableStateOf<DayAttendance?>(null) }
     var showSettingsDialog by remember { mutableStateOf(false) }
@@ -65,7 +76,6 @@ fun AttendanceScreen(
     val nestedScrollConnection = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                // When dragging upward while pulled down, collapse pull distance first
                 if (source == NestedScrollSource.Drag && available.y < 0f && pullOffset.value > 0f) {
                     val consumedY = available.y.coerceAtLeast(-pullOffset.value)
                     coroutineScope.launch {
@@ -81,7 +91,6 @@ fun AttendanceScreen(
                 available: Offset,
                 source: NestedScrollSource
             ): Offset {
-                // When at the very top and continuing to pull down, accumulate pull distance with resistance
                 if (source == NestedScrollSource.Drag && available.y > 0f && !isRefreshing) {
                     val newOffset = (pullOffset.value + available.y * 0.45f).coerceAtMost(maxPullPx)
                     coroutineScope.launch {
@@ -148,6 +157,43 @@ fun AttendanceScreen(
                     }
                 },
                 actions = {
+                    // Lines toggle button placed between "Attendance & Payroll" and the Eye icon
+                    IconButton(
+                        onClick = {
+                            showGridLines = !showGridLines
+                            uiPrefs.edit().putBoolean("show_grid_lines", showGridLines).apply()
+                        }
+                    ) {
+                        Canvas(modifier = Modifier.size(19.dp)) {
+                            val strokeWidth = 1.7.dp.toPx()
+                            val color = if (showGridLines) BrandPrimary else Color(0xFF94A3B8)
+
+                            // Outer box
+                            drawRoundRect(
+                                color = color,
+                                topLeft = Offset(0f, 0f),
+                                size = size,
+                                cornerRadius = CornerRadius(3.5.dp.toPx()),
+                                style = Stroke(width = strokeWidth)
+                            )
+                            // Horizontal divider line
+                            drawLine(
+                                color = color,
+                                start = Offset(0f, size.height / 2f),
+                                end = Offset(size.width, size.height / 2f),
+                                strokeWidth = strokeWidth
+                            )
+                            // Vertical divider line
+                            drawLine(
+                                color = color,
+                                start = Offset(size.width / 2f, 0f),
+                                end = Offset(size.width / 2f, size.height),
+                                strokeWidth = strokeWidth
+                            )
+                        }
+                    }
+
+                    // Eye Icon (Calendar PDF View)
                     IconButton(onClick = { showCalendarPdfDialog = true }) {
                         Text(
                             text = "👁",
@@ -155,6 +201,7 @@ fun AttendanceScreen(
                         )
                     }
 
+                    // Three-Dots Menu
                     IconButton(onClick = { menuExpanded = true }) {
                         Text(
                             text = "⋮",
@@ -252,6 +299,7 @@ fun AttendanceScreen(
                 ModernCalendarCard(
                     currentMonth = displayedMonth,
                     attendanceMap = attendanceMap,
+                    showGridLines = showGridLines,
                     onDayClick = { selectedDayForEdit = it }
                 )
 
