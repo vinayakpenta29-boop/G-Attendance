@@ -1,5 +1,11 @@
 package com.attendance.app
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -14,11 +20,23 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.PathMeasure
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.DayOfWeek
@@ -26,6 +44,93 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
+
+/**
+ * Animated "Snake Running" outline border applied exclusively to Today's calendar cell.
+ */
+@Composable
+fun Modifier.snakeRunningBorder(
+    borderWidth: Dp = 2.dp,
+    cornerRadius: Dp = 8.dp,
+    trackColor: Color = Color(0xFFE0E7FF),
+    snakeColors: List<Color> = listOf(
+        Color(0xFF4F46E5), // Indigo
+        Color(0xFF06B6D4), // Cyan
+        Color(0xFFA855F7), // Purple
+        Color(0xFF4F46E5)  // Indigo
+    ),
+    durationMillis: Int = 2200
+): Modifier {
+    val infiniteTransition = rememberInfiniteTransition(label = "snake_border_anim")
+    val progress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = durationMillis, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "snake_progress"
+    )
+
+    val density = LocalDensity.current
+    val strokeWidthPx = with(density) { borderWidth.toPx() }
+    val cornerRadiusPx = with(density) { cornerRadius.toPx() }
+
+    val path = remember { Path() }
+    val pathMeasure = remember { PathMeasure() }
+
+    return this.drawWithContent {
+        drawContent()
+
+        val halfStroke = strokeWidthPx / 2f
+        val w = size.width
+        val h = size.height
+
+        if (w > strokeWidthPx && h > strokeWidthPx) {
+            path.reset()
+            path.addRoundRect(
+                RoundRect(
+                    rect = Rect(halfStroke, halfStroke, w - halfStroke, h - halfStroke),
+                    cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx)
+                )
+            )
+
+            pathMeasure.setPath(path, false)
+            val totalLength = pathMeasure.length
+
+            if (totalLength > 0f) {
+                // Background static track
+                drawPath(
+                    path = path,
+                    color = trackColor,
+                    style = Stroke(width = strokeWidthPx)
+                )
+
+                // Animated circulating snake segment
+                val snakeLength = totalLength * 0.35f
+                val gapLength = totalLength - snakeLength
+                val phase = progress * totalLength
+
+                drawPath(
+                    path = path,
+                    brush = Brush.linearGradient(
+                        colors = snakeColors,
+                        start = Offset(0f, 0f),
+                        end = Offset(w, h)
+                    ),
+                    style = Stroke(
+                        width = strokeWidthPx,
+                        cap = StrokeCap.Round,
+                        pathEffect = PathEffect.dashPathEffect(
+                            intervals = floatArrayOf(snakeLength, gapLength),
+                            phase = -phase
+                        )
+                    )
+                )
+            }
+        }
+    }
+}
 
 @Composable
 fun ModernSalesIncentiveCard(
@@ -507,13 +612,34 @@ fun ModernDayCell(
         else -> Pair(Color(0xFFFAFAFA), Color(0xFFF1F5F9))
     }
 
-    Surface(
-        modifier = modifier
+    // Apply the animated Snake Running border ONLY to Today's box
+    val cellModifier = if (isToday) {
+        modifier
             .padding(2.5.dp)
-            .clickable { onClick() },
+            .snakeRunningBorder(
+                borderWidth = 2.dp,
+                cornerRadius = 8.dp,
+                trackColor = Color(0xFFE0E7FF),
+                snakeColors = listOf(
+                    Color(0xFF4F46E5), // Indigo
+                    Color(0xFF06B6D4), // Cyan
+                    Color(0xFFA855F7), // Purple
+                    Color(0xFF4F46E5)
+                ),
+                durationMillis = 2200
+            )
+            .clickable { onClick() }
+    } else {
+        modifier
+            .padding(2.5.dp)
+            .clickable { onClick() }
+    }
+
+    Surface(
+        modifier = cellModifier,
         shape = RoundedCornerShape(8.dp),
         color = bgColor,
-        border = BorderStroke(if (isToday) 1.8.dp else 1.dp, borderColor)
+        border = if (isToday) null else BorderStroke(1.dp, borderColor)
     ) {
         Column(
             modifier = Modifier
