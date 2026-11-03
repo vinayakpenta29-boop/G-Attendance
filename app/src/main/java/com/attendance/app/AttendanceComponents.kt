@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
@@ -54,10 +55,11 @@ fun Modifier.snakeRunningBorder(
     cornerRadius: Dp = 8.dp,
     trackColor: Color = Color(0xFFE0E7FF),
     snakeColors: List<Color> = listOf(
-        Color(0xFF4F46E5), // Indigo
-        Color(0xFF06B6D4), // Cyan
-        Color(0xFFA855F7), // Purple
-        Color(0xFF4F46E5)  // Indigo
+        Color(0xFF4285F4), // Google Blue
+        Color(0xFFEA4335), // Google Red
+        Color(0xFFFBBC05), // Google Yellow
+        Color(0xFF34A853), // Google Green
+        Color(0xFF4285F4)  // Loop back to Blue
     ),
     durationMillis: Int = 2200
 ): Modifier {
@@ -99,14 +101,12 @@ fun Modifier.snakeRunningBorder(
             val totalLength = pathMeasure.length
 
             if (totalLength > 0f) {
-                // Background static rail track
                 drawPath(
                     path = path,
                     color = trackColor,
                     style = Stroke(width = strokeWidthPx)
                 )
 
-                // Animated snake running clockwise
                 val snakeLength = totalLength * 0.35f
                 val gapLength = totalLength - snakeLength
                 val phase = progress * totalLength
@@ -123,7 +123,7 @@ fun Modifier.snakeRunningBorder(
                         cap = StrokeCap.Round,
                         pathEffect = PathEffect.dashPathEffect(
                             intervals = floatArrayOf(snakeLength, gapLength),
-                            phase = phase // Positive phase advances the dash clockwise
+                            phase = phase
                         )
                     )
                 )
@@ -522,6 +522,7 @@ fun ModernLocationBanner(
 fun ModernCalendarCard(
     currentMonth: YearMonth,
     attendanceMap: Map<String, DayAttendance>,
+    showGridLines: Boolean = false,
     onDayClick: (DayAttendance) -> Unit
 ) {
     val daysInMonth = currentMonth.lengthOfMonth()
@@ -557,10 +558,46 @@ fun ModernCalendarCard(
                 }
             }
 
+            // Divider separating day headers from date cells when grid lines are enabled
+            if (showGridLines) {
+                Divider(
+                    color = Color(0xFFCBD5E1),
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            }
+
             Column(modifier = Modifier.fillMaxWidth()) {
                 for (row in 0 until totalRows) {
+                    // Horizontal divider line between rows
+                    if (showGridLines && row > 0) {
+                        Divider(
+                            color = Color(0xFFCBD5E1),
+                            thickness = 1.dp,
+                            modifier = Modifier.padding(vertical = 3.dp)
+                        )
+                    }
+
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (showGridLines) {
+                                    // Draws vertical lines between the 7 date columns
+                                    Modifier.drawBehind {
+                                        val colWidth = size.width / 7f
+                                        for (c in 1 until 7) {
+                                            val x = c * colWidth
+                                            drawLine(
+                                                color = Color(0xFFCBD5E1),
+                                                start = Offset(x, 1.dp.toPx()),
+                                                end = Offset(x, size.height - 1.dp.toPx()),
+                                                strokeWidth = 1.dp.toPx()
+                                            )
+                                        }
+                                    }
+                                } else Modifier
+                            ),
                         horizontalArrangement = Arrangement.Center
                     ) {
                         for (col in 0 until 7) {
@@ -612,7 +649,6 @@ fun ModernDayCell(
         else -> Pair(Color(0xFFFAFAFA), Color(0xFFF1F5F9))
     }
 
-    // Apply the animated Snake Running border ONLY to Today's box (moving clockwise)
     val cellModifier = if (isToday) {
         modifier
             .padding(2.5.dp)
@@ -621,10 +657,11 @@ fun ModernDayCell(
                 cornerRadius = 8.dp,
                 trackColor = Color(0xFFE0E7FF),
                 snakeColors = listOf(
-                    Color(0xFF4F46E5), // Indigo
-                    Color(0xFF06B6D4), // Cyan
-                    Color(0xFFA855F7), // Purple
-                    Color(0xFF4F46E5)
+                    Color(0xFF4285F4),
+                    Color(0xFFEA4335),
+                    Color(0xFFFBBC05),
+                    Color(0xFF34A853),
+                    Color(0xFF4285F4)
                 ),
                 durationMillis = 2200
             )
@@ -1066,10 +1103,9 @@ fun ModernSalaryInvoiceCard(report: SalaryReport) {
                     .background(
                         Brush.linearGradient(
                             listOf(
-                                Color(0xFF4285F4),
-                                Color(0xFFEA4335),
-                                Color(0xFFFBBC05),
-                                Color(0xFF34A853)
+                                Color(0xFF064E3B),
+                                Color(0xFF047857),
+                                Color(0xFF059669)
                             )
                         )
                     )
