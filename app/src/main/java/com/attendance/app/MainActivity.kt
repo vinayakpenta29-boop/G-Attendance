@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
             permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         ) {
             try {
-                LocationTrackerWorker.scheduleNext(this)
+                LocationTrackerReceiver.scheduleNext(this)
                 checkLiveLocationAtWorkplace()
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -56,13 +56,12 @@ class MainActivity : ComponentActivity() {
         requestPermissions()
 
         try {
-            LocationTrackerWorker.scheduleNext(this)
+            LocationTrackerReceiver.scheduleNext(this)
             checkLiveLocationAtWorkplace()
         } catch (e: Exception) {
             e.printStackTrace()
         }
 
-        // Schedule exact 10 PM alarm
         SalesReminderReceiver.scheduleExact10PMRminder(this)
 
         setContent {
@@ -89,7 +88,7 @@ class MainActivity : ComponentActivity() {
                 onRefresh = {
                     loadData()
                     checkLiveLocationAtWorkplace()
-                    LocationTrackerWorker.scheduleNext(this@MainActivity)
+                    LocationTrackerReceiver.scheduleNext(this@MainActivity)
                     Toast.makeText(this@MainActivity, "Data & Location Synced", Toast.LENGTH_SHORT).show()
                 }
             )
@@ -100,7 +99,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         loadData()
         try {
-            LocationTrackerWorker.scheduleNext(this)
+            LocationTrackerReceiver.scheduleNext(this)
             checkLiveLocationAtWorkplace()
         } catch (e: Exception) {
             e.printStackTrace()
