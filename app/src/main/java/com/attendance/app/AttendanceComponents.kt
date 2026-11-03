@@ -46,7 +46,7 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 /**
- * Animated "Snake Running" outline border applied exclusively to Today's calendar cell.
+ * Animated "Snake Running" outline border running clockwise around Today's box.
  */
 @Composable
 fun Modifier.snakeRunningBorder(
@@ -99,14 +99,14 @@ fun Modifier.snakeRunningBorder(
             val totalLength = pathMeasure.length
 
             if (totalLength > 0f) {
-                // Background static track
+                // Background static rail track
                 drawPath(
                     path = path,
                     color = trackColor,
                     style = Stroke(width = strokeWidthPx)
                 )
 
-                // Animated circulating snake segment
+                // Animated snake running clockwise
                 val snakeLength = totalLength * 0.35f
                 val gapLength = totalLength - snakeLength
                 val phase = progress * totalLength
@@ -123,7 +123,7 @@ fun Modifier.snakeRunningBorder(
                         cap = StrokeCap.Round,
                         pathEffect = PathEffect.dashPathEffect(
                             intervals = floatArrayOf(snakeLength, gapLength),
-                            phase = -phase
+                            phase = phase // Positive phase advances the dash clockwise
                         )
                     )
                 )
@@ -612,7 +612,7 @@ fun ModernDayCell(
         else -> Pair(Color(0xFFFAFAFA), Color(0xFFF1F5F9))
     }
 
-    // Apply the animated Snake Running border ONLY to Today's box
+    // Apply the animated Snake Running border ONLY to Today's box (moving clockwise)
     val cellModifier = if (isToday) {
         modifier
             .padding(2.5.dp)
@@ -1066,9 +1066,10 @@ fun ModernSalaryInvoiceCard(report: SalaryReport) {
                     .background(
                         Brush.linearGradient(
                             listOf(
-                                Color(0xFF064E3B),
-                                Color(0xFF047857),
-                                Color(0xFF059669)
+                                Color(0xFF4285F4),
+                                Color(0xFFEA4335),
+                                Color(0xFFFBBC05),
+                                Color(0xFF34A853)
                             )
                         )
                     )
