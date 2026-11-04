@@ -55,10 +55,10 @@ fun Modifier.snakeRunningBorder(
     cornerRadius: Dp = 8.dp,
     trackColor: Color = Color(0xFFE0E7FF),
     snakeColors: List<Color> = listOf(
-        Color(0xFFD4E09B), // Google Blue
-        Color(0xFFF6F4D2), // Google Red
-        Color(0xFFCBDFBD), // Google Yellow
-        Color(0xFFF19C79) // Google Green
+        Color(0xFFEF476F), // Google Blue
+        Color(0xFFFFD166), // Google Red
+        Color(0xFF06D6A0), // Google Yellow
+        Color(0xFF118AB2) // Google Green
         
     ),
     durationMillis: Int = 2200
@@ -657,10 +657,10 @@ fun ModernDayCell(
                 cornerRadius = 8.dp,
                 trackColor = Color(0xFFE0E7FF),
                 snakeColors = listOf(
-                    Color(0xFFD4E09B), // Google Blue
-                    Color(0xFFF6F4D2), // Google Red
-                    Color(0xFFCBDFBD), // Google Yellow
-                    Color(0xFFF19C79)
+                    Color(0xFFEF476F), // Google Blue
+                    Color(0xFFFFD166), // Google Red
+                    Color(0xFF06D6A0), // Google Yellow
+                    Color(0xFF118AB2)
                     
                 ),
                 durationMillis = 2200
