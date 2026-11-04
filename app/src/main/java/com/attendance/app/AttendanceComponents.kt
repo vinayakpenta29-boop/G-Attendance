@@ -59,6 +59,7 @@ fun Modifier.snakeRunningBorder(
         Color(0xFFEA4335), // Google Red
         Color(0xFFFBBC05), // Google Yellow
         Color(0xFF34A853), // Google Green
+        color(0xFF4285F4)
     ),
     durationMillis: Int = 2200
 ): Modifier {
@@ -660,6 +661,7 @@ fun ModernDayCell(
                     Color(0xFFEA4335),
                     Color(0xFFFBBC05),
                     Color(0xFF34A853),
+                    color(0xFF4285F4)
                     
                 ),
                 durationMillis = 2200
