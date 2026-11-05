@@ -18,6 +18,9 @@
 
     <application
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:restoreAnyVersion="true"
         android:icon="@drawable/ic_app_icon"
         android:roundIcon="@drawable/ic_app_icon"
         android:label="G-Attendance"
