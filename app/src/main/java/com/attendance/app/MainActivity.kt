@@ -1,6 +1,7 @@
 package com.attendance.app
 
 import android.Manifest
+import android.app.backup.BackupManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
@@ -340,6 +341,8 @@ class MainActivity : ComponentActivity() {
         try {
             val sp = getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
             sp.edit().putString("records", gson.toJson(attendanceMap)).commit()
+            // Alert Android BackupManager of new cloud backup data
+            BackupManager.dataChanged(packageName)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -349,6 +352,8 @@ class MainActivity : ComponentActivity() {
         try {
             val sp = getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
             sp.edit().putString("settings", gson.toJson(settings)).commit()
+            // Alert Android BackupManager of new cloud backup data
+            BackupManager.dataChanged(packageName)
         } catch (e: Exception) {
             e.printStackTrace()
         }
