@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Explicitly backup all SharedPreferences files -->
+    <include domain="sharedpref" path="." />
+    <!-- Exclude cache files -->
+    <exclude domain="root" path="cache" />
+</full-backup-content>
