@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!-- Explicitly backup all SharedPreferences files -->
+    <!-- Explicitly includes all app SharedPreferences (attendance, logs, settings) -->
     <include domain="sharedpref" path="." />
-    <!-- Exclude cache files -->
-    <exclude domain="root" path="cache" />
 </full-backup-content>
