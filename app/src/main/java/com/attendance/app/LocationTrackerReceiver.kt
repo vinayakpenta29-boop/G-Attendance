@@ -2,6 +2,7 @@ package com.attendance.app
 
 import android.app.AlarmManager
 import android.app.PendingIntent
+import android.app.backup.BackupManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -50,21 +51,14 @@ class LocationTrackerReceiver : BroadcastReceiver() {
             val t2130 = LocalTime.of(21, 30)
 
             val nextRunTime: LocalDateTime = when {
-                // Before 10:00 AM -> wake up at 10:00:00 AM sharp
                 time.isBefore(t1000) -> now.withHour(10).withMinute(0).withSecond(0).withNano(0)
-
-                // 10:00 AM - 10:30 AM:
-                // If arrival is NOT logged yet -> check every 1 MINUTE sharp to record exact reaching minute
                 time.isBefore(t1030) -> {
                     if (!isArrivalLogged) {
                         now.plusMinutes(1).withSecond(0).withNano(0)
                     } else {
-                        // Arrival already recorded (e.g. at 10:26 AM), wait until 10:30 AM
                         now.withHour(10).withMinute(30).withSecond(0).withNano(0)
                     }
                 }
-
-                // 10:30 AM - 3:00 PM -> check every 30 minutes; snap to 3:00:05 PM for H1 evaluation
                 time.isBefore(t1500) -> {
                     val candidate = now.plusMinutes(30)
                     if (candidate.toLocalTime().isAfter(t1500)) {
@@ -73,8 +67,6 @@ class LocationTrackerReceiver : BroadcastReceiver() {
                         candidate
                     }
                 }
-
-                // 3:00 PM - 9:00 PM -> check every 30 minutes; snap to 9:00:05 PM for H2 evaluation
                 time.isBefore(t2100) -> {
                     val candidate = now.plusMinutes(30)
                     if (candidate.toLocalTime().isAfter(t2100)) {
@@ -83,11 +75,7 @@ class LocationTrackerReceiver : BroadcastReceiver() {
                         candidate
                     }
                 }
-
-                // 9:00 PM - 9:30 PM -> check every 10 minutes to ensure full day completion is recorded
                 time.isBefore(t2130) -> now.plusMinutes(10).withSecond(0).withNano(0)
-
-                // After 9:30 PM -> sleep until 10:00:00 AM sharp tomorrow
                 else -> now.plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0)
             }
 
@@ -129,7 +117,7 @@ class LocationTrackerReceiver : BroadcastReceiver() {
 
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
         val wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "GAttendance:ExactTrackerWakeLock")
-        wakeLock?.acquire(35_000L) // Keep CPU awake while GPS resolves in pocket
+        wakeLock?.acquire(35_000L)
 
         val pendingResult = goAsync()
 
@@ -213,7 +201,6 @@ class LocationTrackerReceiver : BroadcastReceiver() {
         var recordedArrivalStatusToSave: String? = null
 
         if (isInside) {
-            // First time detection: records exact arrival minute (e.g. 10:26 AM)
             val isArrivalLogged = trackerPrefs.getBoolean("${today}_arrival_logged", false)
             if (!isArrivalLogged) {
                 val formattedNow = now.format(DateTimeFormatter.ofPattern("hh:mm a", Locale.ENGLISH))
@@ -284,6 +271,7 @@ class LocationTrackerReceiver : BroadcastReceiver() {
                     arrivalStatus = finalArrivalStatus
                 )
                 dbPrefs.edit().putString("records", gson.toJson(map)).commit()
+                BackupManager.dataChanged(context.packageName)
             }
             return
         }
@@ -337,5 +325,7 @@ class LocationTrackerReceiver : BroadcastReceiver() {
             arrivalStatus = finalArrivalStatus
         )
         dbPrefs.edit().putString("records", gson.toJson(map)).commit()
+        // Alert Android BackupManager of new cloud backup data
+        BackupManager.dataChanged(context.packageName)
     }
 }
