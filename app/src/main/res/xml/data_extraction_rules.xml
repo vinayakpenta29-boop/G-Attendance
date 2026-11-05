@@ -1,10 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
     <cloud-backup>
-        <!-- Explicitly backup all app SharedPreferences containing attendance, logs, and settings -->
+        <!-- Explicitly includes all app SharedPreferences for Google Drive cloud backup -->
         <include domain="sharedpref" path="." />
-        <!-- Exclude temporary cache folders to keep backup compact -->
-        <exclude domain="root" path="cache" />
     </cloud-backup>
     <device-transfer>
         <include domain="sharedpref" path="." />
