@@ -1,6 +1,8 @@
 package com.attendance.app
 
 import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -32,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.LocalDate
 import java.time.YearMonth
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -62,7 +65,27 @@ fun AttendanceScreen(
     var showArrivalHistoryDialog by remember { mutableStateOf(false) }
     var showCalendarPdfDialog by remember { mutableStateOf(false) }
     var showGpsConfirmDialog by remember { mutableStateOf(false) }
+    var showRestoreConfirmDialog by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
+
+    // --- File Launchers for Export and Restore ---
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            BackupHelper.exportBackup(context, uri)
+        }
+    }
+
+    val restoreLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            BackupHelper.restoreBackup(context, uri) {
+                onRefresh()
+            }
+        }
+    }
 
     // --- Pull-to-Refresh Physics & State ---
     val density = LocalDensity.current
@@ -157,7 +180,7 @@ fun AttendanceScreen(
                     }
                 },
                 actions = {
-                    // Lines toggle button placed between "Attendance & Payroll" and the Eye icon
+                    // Lines toggle button between Title and Eye icon
                     IconButton(
                         onClick = {
                             showGridLines = !showGridLines
@@ -168,7 +191,6 @@ fun AttendanceScreen(
                             val strokeWidth = 1.7.dp.toPx()
                             val color = if (showGridLines) BrandPrimary else Color(0xFF94A3B8)
 
-                            // Outer box
                             drawRoundRect(
                                 color = color,
                                 topLeft = Offset(0f, 0f),
@@ -176,14 +198,12 @@ fun AttendanceScreen(
                                 cornerRadius = CornerRadius(3.5.dp.toPx()),
                                 style = Stroke(width = strokeWidth)
                             )
-                            // Horizontal divider line
                             drawLine(
                                 color = color,
                                 start = Offset(0f, size.height / 2f),
                                 end = Offset(size.width, size.height / 2f),
                                 strokeWidth = strokeWidth
                             )
-                            // Vertical divider line
                             drawLine(
                                 color = color,
                                 start = Offset(size.width / 2f, 0f),
@@ -193,7 +213,7 @@ fun AttendanceScreen(
                         }
                     }
 
-                    // Eye Icon (Calendar PDF View)
+                    // Eye Icon (PDF Viewer)
                     IconButton(onClick = { showCalendarPdfDialog = true }) {
                         Text(
                             text = "👁",
@@ -256,6 +276,39 @@ fun AttendanceScreen(
                             onClick = {
                                 menuExpanded = false
                                 showGpsConfirmDialog = true
+                            }
+                        )
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 4.dp),
+                            color = Color(0xFFF1F5F9),
+                            thickness = 1.dp
+                        )
+
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("📤", fontSize = 14.sp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Export Backup", fontWeight = FontWeight.SemiBold, color = BrandPrimary)
+                                }
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                exportLauncher.launch("G-Attendance_Backup_${LocalDate.now()}.json")
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("📥", fontSize = 14.sp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Restore Backup", fontWeight = FontWeight.SemiBold, color = Color(0xFF047857))
+                                }
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                showRestoreConfirmDialog = true
                             }
                         )
                     }
@@ -353,6 +406,43 @@ fun AttendanceScreen(
                 }
             }
         }
+    }
+
+    // --- Restore Confirmation Dialog ---
+    if (showRestoreConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showRestoreConfirmDialog = false },
+            title = {
+                Text(
+                    text = "Restore Attendance Backup?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Text(
+                    text = "Restoring a backup will merge and update all attendance days, arrival punch records, and payroll settings from your selected .json backup file.\n\nDo you want to proceed and select the backup file?",
+                    fontSize = 13.5.sp,
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showRestoreConfirmDialog = false
+                        restoreLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandPrimary)
+                ) {
+                    Text("Select Backup File")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestoreConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (showArrivalHistoryDialog) {
