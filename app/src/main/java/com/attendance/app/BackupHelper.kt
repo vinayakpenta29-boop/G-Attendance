@@ -1,6 +1,5 @@
 package com.attendance.app
 
-import android.app.backup.BackupManager
 import android.content.Context
 import android.net.Uri
 import android.widget.Toast
@@ -57,7 +56,6 @@ object BackupHelper {
             val backup = gson.fromJson(jsonString, AttendanceBackup::class.java)
                 ?: throw Exception("Invalid backup file format")
 
-            // 1. Restore Attendance Records & Salary Settings
             val dbPrefs = context.getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
             val dbEditor = dbPrefs.edit()
             if (!backup.recordsJson.isNullOrEmpty()) {
@@ -68,7 +66,6 @@ object BackupHelper {
             }
             dbEditor.commit()
 
-            // 2. Restore Arrival Logs & Geofence Tracker Prefs
             if (backup.trackerPrefs != null) {
                 val trackerPrefs = context.getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
                 val trEditor = trackerPrefs.edit()
@@ -85,8 +82,6 @@ object BackupHelper {
                 trEditor.commit()
             }
 
-            // 3. Notify Android BackupManager & Refresh UI
-            BackupManager.dataChanged(context.packageName)
             Toast.makeText(context, "Backup restored successfully!", Toast.LENGTH_LONG).show()
             onComplete()
         } catch (e: Exception) {
