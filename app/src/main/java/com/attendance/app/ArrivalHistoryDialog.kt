@@ -11,12 +11,15 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -32,6 +35,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
 import java.util.Locale
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -47,7 +51,6 @@ fun ArrivalHistoryDialog(
     var displayedMonth by remember { mutableStateOf(initialMonth) }
     val todayString = remember { LocalDate.now().toString() }
 
-    // State for the long-press edit popup
     var selectedDayForEdit by remember { mutableStateOf<DayAttendance?>(null) }
 
     val daysInMonth = displayedMonth.lengthOfMonth()
@@ -66,39 +69,76 @@ fun ArrivalHistoryDialog(
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth(0.94f)
-                .fillMaxHeight(0.92f),
-            shape = RoundedCornerShape(24.dp),
-            color = Color.White,
-            shadowElevation = 8.dp
+                .fillMaxWidth(0.95f)
+                .fillMaxHeight(0.94f)
+                .shadow(16.dp, RoundedCornerShape(26.dp)),
+            shape = RoundedCornerShape(26.dp),
+            color = Color(0xFFFAFBFD),
+            border = BorderStroke(1.dp, Color(0xFFE2E8F0))
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 18.dp, vertical = 20.dp)
+                    .padding(horizontal = 18.dp, vertical = 18.dp)
             ) {
-                // Header Titles
-                Text(
-                    text = "Daily Arrival Log",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1E293B)
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Independent Workplace Punch Record",
-                    fontSize = 12.sp,
-                    color = Color(0xFF64748B)
-                )
+                // --- Top Header ---
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(Color(0xFF4F46E5), Color(0xFF6366F1))
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("⏱", fontSize = 20.sp)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Daily Arrival Log",
+                                fontSize = 19.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFF0F172A),
+                                letterSpacing = (-0.4).sp
+                            )
+                            Text(
+                                text = "Independent workplace punch record",
+                                fontSize = 11.5.sp,
+                                color = Color(0xFF64748B),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFF1F5F9))
+                    ) {
+                        Text("✕", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF475569))
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Month Navigator
+                // --- Month Navigator Card ---
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFFF8FAFC),
-                    border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    shadowElevation = 1.dp
                 ) {
                     Row(
                         modifier = Modifier
@@ -109,42 +149,74 @@ fun ArrivalHistoryDialog(
                     ) {
                         IconButton(
                             onClick = { displayedMonth = displayedMonth.minusMonths(1) },
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFF8FAFC))
                         ) {
-                            Text("‹", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                            Text("‹", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF334155))
                         }
 
-                        Text(
-                            text = "${displayedMonth.month.getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH)} ${displayedMonth.year}",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF4F46E5)
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "${displayedMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)} ${displayedMonth.year}",
+                                fontSize = 15.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF1E293B)
+                            )
+                        }
 
                         IconButton(
                             onClick = { displayedMonth = displayedMonth.plusMonths(1) },
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFF8FAFC))
                         ) {
-                            Text("›", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                            Text("›", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF334155))
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                // Metrics Row (Total Logged, On Time, Late)
+                // --- Summary KPI Cards ---
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    MetricSummaryItem(title = "Total Logged", value = "$totalLogged Days", color = Color(0xFF1E293B))
-                    MetricSummaryItem(title = "On Time (P)", value = "$onTimeCount Days", color = Color(0xFF059669))
-                    MetricSummaryItem(title = "Late (L)", value = "$lateCount Days", color = Color(0xFFD97706))
+                    PremiumKpiCard(
+                        modifier = Modifier.weight(1f),
+                        label = "Total Logged",
+                        value = "$totalLogged",
+                        suffix = "Days",
+                        themeColor = Color(0xFF4F46E5),
+                        bgColor = Color(0xFFEEF2FF),
+                        borderColor = Color(0xFFC7D2FE)
+                    )
+                    PremiumKpiCard(
+                        modifier = Modifier.weight(1f),
+                        label = "On Time (P)",
+                        value = "$onTimeCount",
+                        suffix = "Days",
+                        themeColor = Color(0xFF059669),
+                        bgColor = Color(0xFFECFDF5),
+                        borderColor = Color(0xFFA7F3D0)
+                    )
+                    PremiumKpiCard(
+                        modifier = Modifier.weight(1f),
+                        label = "Late (L)",
+                        value = "$lateCount",
+                        suffix = "Days",
+                        themeColor = Color(0xFFD97706),
+                        bgColor = Color(0xFFFFFBEB),
+                        borderColor = Color(0xFFFDE68A)
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                // 4-Column Calendar Grid matching Daily Arrival Log
+                // --- Calendar Cards Grid ---
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(4),
                     modifier = Modifier
@@ -157,106 +229,186 @@ fun ArrivalHistoryDialog(
                         val record = monthRecords[index]
                         val isToday = (record.dateString == todayString)
                         val hasArrival = !record.arrivalTime.isNullOrBlank()
+                        val isLate = record.arrivalStatus.equals("L", ignoreCase = true)
+                        val isOnTime = record.arrivalStatus.equals("P", ignoreCase = true)
+
+                        val cellBg = when {
+                            isToday -> Color(0xFFF4F6FF)
+                            hasArrival && isOnTime -> Color(0xFFFAFDFA)
+                            hasArrival && isLate -> Color(0xFFFFFDF8)
+                            else -> Color.White
+                        }
+
+                        val cellBorder = when {
+                            isToday -> Color(0xFF4F46E5)
+                            hasArrival && isOnTime -> Color(0xFFA7F3D0)
+                            hasArrival && isLate -> Color(0xFFFED7AA)
+                            else -> Color(0xFFE2E8F0)
+                        }
 
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(94.dp)
-                                .clip(RoundedCornerShape(12.dp))
+                                .height(98.dp)
+                                .shadow(if (isToday) 3.dp else 1.dp, RoundedCornerShape(14.dp))
+                                .clip(RoundedCornerShape(14.dp))
                                 .combinedClickable(
                                     onClick = {
-                                        Toast.makeText(context, "Long press day ${record.dayOfMonth} to edit arrival time", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(
+                                            context,
+                                            "Hold day ${record.dayOfMonth} to edit punch time",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                     },
                                     onLongClick = {
                                         selectedDayForEdit = record
                                     }
                                 ),
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isToday) Color(0xFFF5F7FF) else Color(0xFFFAFAFA),
-                            border = BorderStroke(
-                                width = if (isToday) 2.dp else 1.dp,
-                                color = if (isToday) Color(0xFF4F46E5) else Color(0xFFE2E8F0)
-                            )
+                            shape = RoundedCornerShape(14.dp),
+                            color = cellBg,
+                            border = BorderStroke(if (isToday) 2.dp else 1.dp, cellBorder)
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(vertical = 6.dp, horizontal = 4.dp),
+                                    .padding(horizontal = 6.dp, vertical = 7.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.SpaceBetween
                             ) {
-                                // Day Number
-                                Text(
-                                    text = "${record.dayOfMonth}",
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.Bold,
-                                    color = if (isToday) Color(0xFF4F46E5) else Color(0xFF1E293B)
-                                )
+                                // Day Header Row
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${record.dayOfMonth}",
+                                        fontSize = 13.sp,
+                                        fontWeight = if (isToday) FontWeight.Black else FontWeight.Bold,
+                                        color = if (isToday) Color(0xFF4F46E5) else Color(0xFF1E293B)
+                                    )
 
-                                // Arrival Time Text
+                                    if (isToday) {
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = Color(0xFF4F46E5)
+                                        ) {
+                                            Text(
+                                                text = "TODAY",
+                                                fontSize = 6.5.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color.White,
+                                                modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Arrival Punch Time
                                 Text(
-                                    text = if (hasArrival) record.arrivalTime!! else "--",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (hasArrival) Color(0xFF334155) else Color(0xFF94A3B8),
+                                    text = if (hasArrival) record.arrivalTime!! else "-- : --",
+                                    fontSize = 10.sp,
+                                    fontWeight = if (hasArrival) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (hasArrival) Color(0xFF0F172A) else Color(0xFF94A3B8),
+                                    textAlign = TextAlign.Center,
                                     maxLines = 1
                                 )
 
-                                // Status Badge (P / L / -)
-                                val badgeColor = when (record.arrivalStatus?.uppercase()) {
-                                    "P" -> Color(0xFF10B981)
-                                    "L" -> Color(0xFFF59E0B)
-                                    else -> Color(0xFFE2E8F0)
-                                }
-                                val textColor = if (hasArrival) Color.White else Color(0xFF94A3B8)
-
-                                Box(
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(badgeColor),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = if (hasArrival) (record.arrivalStatus?.uppercase() ?: "-") else "-",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = textColor
-                                    )
+                                // Premium Badge Pill
+                                when {
+                                    hasArrival && isOnTime -> {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = Color(0xFFDCFCE7),
+                                            border = BorderStroke(0.8.dp, Color(0xFF86EFAC)),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = "P • ON TIME",
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color(0xFF166534),
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.padding(vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                    hasArrival && isLate -> {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = Color(0xFFFEF3C7),
+                                            border = BorderStroke(0.8.dp, Color(0xFFFDE68A)),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = "L • LATE",
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color(0xFF92400E),
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.padding(vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                    else -> {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = Color(0xFFF1F5F9),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = "-",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF94A3B8),
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.padding(vertical = 2.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                // Bottom Hint and Close Button
+                // --- Footer Navigation & Hint ---
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFFF1F5F9))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "💡 Long press any day to edit",
-                        fontSize = 11.sp,
-                        color = Color(0xFF64748B)
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("💡", fontSize = 12.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Long press any cell to edit punch",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF475569)
+                        )
+                    }
 
                     Button(
                         onClick = onDismiss,
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5)),
-                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp)
+                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 6.dp)
                     ) {
-                        Text("Close", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("Done", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
     }
 
-    // Long-Press Edit Dialog Popup
+    // --- Long-Press Edit Dialog Popup ---
     selectedDayForEdit?.let { targetDay ->
         EditArrivalPunchDialog(
             dayRecord = targetDay,
@@ -268,10 +420,8 @@ fun ArrivalHistoryDialog(
                     arrivalStatus = updatedStatus
                 )
 
-                // 1. Update in-memory map
                 attendanceMap[dateStr] = updatedRecord
 
-                // 2. Persist to attendance_db
                 val dbPrefs = context.getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
                 val json = dbPrefs.getString("records", null)
                 val type: Type = object : TypeToken<MutableMap<String, DayAttendance>>() {}.type
@@ -283,7 +433,6 @@ fun ArrivalHistoryDialog(
                 map[dateStr] = updatedRecord
                 dbPrefs.edit().putString("records", gson.toJson(map)).commit()
 
-                // 3. Persist to attendance_prefs
                 val trPrefs = context.getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
                 if (updatedTime.isNotBlank()) {
                     trPrefs.edit()
@@ -300,7 +449,11 @@ fun ArrivalHistoryDialog(
                 }
 
                 onDayUpdated?.invoke(updatedRecord)
-                Toast.makeText(context, "Day ${targetDay.dayOfMonth} punch updated to $updatedTime ($updatedStatus)", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    "Day ${targetDay.dayOfMonth} updated to $updatedTime ($updatedStatus)",
+                    Toast.LENGTH_SHORT
+                ).show()
                 selectedDayForEdit = null
             }
         )
@@ -308,11 +461,49 @@ fun ArrivalHistoryDialog(
 }
 
 @Composable
-private fun MetricSummaryItem(title: String, value: String, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(title, fontSize = 11.sp, color = Color(0xFF64748B), fontWeight = FontWeight.Medium)
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(value, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = color)
+private fun PremiumKpiCard(
+    label: String,
+    value: String,
+    suffix: String,
+    themeColor: Color,
+    bgColor: Color,
+    borderColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = bgColor,
+        border = BorderStroke(1.dp, borderColor)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = label,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = themeColor.copy(alpha = 0.9f)
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = value,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Black,
+                    color = themeColor
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+                Text(
+                    text = suffix,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = themeColor.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(bottom = 1.5.dp)
+                )
+            }
+        }
     }
 }
 
@@ -326,7 +517,6 @@ fun EditArrivalPunchDialog(
     var selectedTime by remember { mutableStateOf(dayRecord.arrivalTime ?: "") }
     var selectedStatus by remember { mutableStateOf(dayRecord.arrivalStatus ?: "") }
 
-    // Parse initial hour/minute from existing time string if available (e.g. "10:26 AM")
     val initialTime = remember(dayRecord.arrivalTime) {
         try {
             if (!dayRecord.arrivalTime.isNullOrBlank()) {
@@ -347,13 +537,12 @@ fun EditArrivalPunchDialog(
                 val formatted = pickedLocalTime.format(DateTimeFormatter.ofPattern("hh:mm a", Locale.ENGLISH))
                 selectedTime = formatted
 
-                // Automatically recommend status: On-Time if <= 10:15:59 AM, else Late
                 val cutoff = LocalTime.of(10, 15, 59)
                 selectedStatus = if (!pickedLocalTime.isAfter(cutoff)) "P" else "L"
             },
             initialTime.hour,
             initialTime.minute,
-            false // 12-hour format with AM/PM
+            false
         )
     }
 
@@ -361,26 +550,25 @@ fun EditArrivalPunchDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Edit Arrival Time - Day ${dayRecord.dayOfMonth}",
-                fontWeight = FontWeight.Bold,
-                fontSize = 17.sp,
-                color = Color(0xFF1E293B)
+                text = "Edit Punch - Day ${dayRecord.dayOfMonth}",
+                fontWeight = FontWeight.Black,
+                fontSize = 18.sp,
+                color = Color(0xFF0F172A)
             )
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "Select workplace arrival time for ${dayRecord.dateString}:",
+                    text = "Update arrival punch record for ${dayRecord.dateString}:",
                     fontSize = 12.5.sp,
                     color = Color(0xFF64748B)
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Time picker display card
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFFF1F5F9),
+                    color = Color(0xFFF8FAFC),
                     border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -392,12 +580,12 @@ fun EditArrivalPunchDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
-                            Text("Punch Time", fontSize = 11.sp, color = Color(0xFF64748B))
+                            Text("PUNCH TIME", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF64748B))
                             Text(
-                                text = if (selectedTime.isNotBlank()) selectedTime else "Not Set (--)",
+                                text = if (selectedTime.isNotBlank()) selectedTime else "-- : --",
                                 fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (selectedTime.isNotBlank()) Color(0xFF1E293B) else Color(0xFF94A3B8)
+                                fontWeight = FontWeight.Black,
+                                color = if (selectedTime.isNotBlank()) Color(0xFF0F172A) else Color(0xFF94A3B8)
                             )
                         }
 
@@ -405,39 +593,37 @@ fun EditArrivalPunchDialog(
                             onClick = { timePickerDialog.show() },
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5)),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                         ) {
-                            Text("Pick Time", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Pick Time", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Status Selection: P (On Time) vs L (Late)
-                Text("Arrival Status:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                Text("PUNCH STATUS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF475569))
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // "P" Chip
                     Surface(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(10.dp))
                             .border(
                                 width = if (selectedStatus == "P") 2.dp else 1.dp,
                                 color = if (selectedStatus == "P") Color(0xFF10B981) else Color(0xFFE2E8F0),
-                                shape = RoundedCornerShape(8.dp)
+                                shape = RoundedCornerShape(10.dp)
                             ),
                         color = if (selectedStatus == "P") Color(0xFFECFDF5) else Color.White,
                         onClick = { selectedStatus = "P" }
                     ) {
                         Text(
                             text = "P (On Time)",
-                            fontSize = 12.5.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (selectedStatus == "P") Color(0xFF047857) else Color(0xFF64748B),
                             modifier = Modifier.padding(vertical = 8.dp),
@@ -445,22 +631,21 @@ fun EditArrivalPunchDialog(
                         )
                     }
 
-                    // "L" Chip
                     Surface(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(10.dp))
                             .border(
                                 width = if (selectedStatus == "L") 2.dp else 1.dp,
                                 color = if (selectedStatus == "L") Color(0xFFF59E0B) else Color(0xFFE2E8F0),
-                                shape = RoundedCornerShape(8.dp)
+                                shape = RoundedCornerShape(10.dp)
                             ),
                         color = if (selectedStatus == "L") Color(0xFFFFFBEB) else Color.White,
                         onClick = { selectedStatus = "L" }
                     ) {
                         Text(
                             text = "L (Late)",
-                            fontSize = 12.5.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (selectedStatus == "L") Color(0xFFB45309) else Color(0xFF64748B),
                             modifier = Modifier.padding(vertical = 8.dp),
@@ -478,24 +663,23 @@ fun EditArrivalPunchDialog(
                         },
                         modifier = Modifier.align(Alignment.End)
                     ) {
-                        Text("Clear Punch Record", color = Color(0xFFDC2626), fontSize = 11.5.sp)
+                        Text("Reset / Clear Punch", color = Color(0xFFDC2626), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
         },
         confirmButton = {
             Button(
-                onClick = {
-                    onSave(selectedTime, selectedStatus)
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5))
+                onClick = { onSave(selectedTime, selectedStatus) },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5)),
+                shape = RoundedCornerShape(8.dp)
             ) {
-                Text("Save")
+                Text("Save Changes", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text("Cancel", color = Color(0xFF64748B))
             }
         }
     )
