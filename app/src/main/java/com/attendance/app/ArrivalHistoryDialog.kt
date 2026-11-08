@@ -69,7 +69,7 @@ fun ArrivalHistoryDialog(
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth(0.95f)
+                .fillMaxWidth(0.96f)
                 .fillMaxHeight(0.94f)
                 .shadow(16.dp, RoundedCornerShape(26.dp)),
             shape = RoundedCornerShape(26.dp),
@@ -79,7 +79,7 @@ fun ArrivalHistoryDialog(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 18.dp, vertical = 18.dp)
+                    .padding(horizontal = 14.dp, vertical = 18.dp)
             ) {
                 // --- Top Header ---
                 Row(
@@ -90,7 +90,7 @@ fun ArrivalHistoryDialog(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(42.dp)
+                                .size(40.dp)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(
                                     Brush.linearGradient(
@@ -99,20 +99,20 @@ fun ArrivalHistoryDialog(
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("⏱", fontSize = 20.sp)
+                            Text("⏱", fontSize = 19.sp)
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
                                 text = "Daily Arrival Log",
-                                fontSize = 19.sp,
+                                fontSize = 18.5.sp,
                                 fontWeight = FontWeight.Black,
                                 color = Color(0xFF0F172A),
                                 letterSpacing = (-0.4).sp
                             )
                             Text(
                                 text = "Independent workplace punch record",
-                                fontSize = 11.5.sp,
+                                fontSize = 11.sp,
                                 color = Color(0xFF64748B),
                                 fontWeight = FontWeight.Medium
                             )
@@ -130,7 +130,7 @@ fun ArrivalHistoryDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // --- Month Navigator Card ---
                 Surface(
@@ -143,24 +143,24 @@ fun ArrivalHistoryDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                            .padding(horizontal = 8.dp, vertical = 5.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(
                             onClick = { displayedMonth = displayedMonth.minusMonths(1) },
                             modifier = Modifier
-                                .size(34.dp)
+                                .size(32.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(Color(0xFFF8FAFC))
                         ) {
-                            Text("‹", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF334155))
+                            Text("‹", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF334155))
                         }
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "${displayedMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)} ${displayedMonth.year}",
-                                fontSize = 15.5.sp,
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color(0xFF1E293B)
                             )
@@ -169,21 +169,21 @@ fun ArrivalHistoryDialog(
                         IconButton(
                             onClick = { displayedMonth = displayedMonth.plusMonths(1) },
                             modifier = Modifier
-                                .size(34.dp)
+                                .size(32.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(Color(0xFFF8FAFC))
                         ) {
-                            Text("›", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF334155))
+                            Text("›", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF334155))
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // --- Summary KPI Cards ---
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     PremiumKpiCard(
                         modifier = Modifier.weight(1f),
@@ -214,16 +214,16 @@ fun ArrivalHistoryDialog(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // --- Calendar Cards Grid ---
+                // --- Calendar Cards Grid (5 Boxes in a Row) ---
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(4),
+                    columns = GridCells.Fixed(5),
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(monthRecords.size) { index ->
                         val record = monthRecords[index]
@@ -249,9 +249,9 @@ fun ArrivalHistoryDialog(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(98.dp)
-                                .shadow(if (isToday) 3.dp else 1.dp, RoundedCornerShape(14.dp))
-                                .clip(RoundedCornerShape(14.dp))
+                                .height(90.dp)
+                                .shadow(if (isToday) 2.5.dp else 0.8.dp, RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(12.dp))
                                 .combinedClickable(
                                     onClick = {
                                         Toast.makeText(
@@ -264,14 +264,14 @@ fun ArrivalHistoryDialog(
                                         selectedDayForEdit = record
                                     }
                                 ),
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(12.dp),
                             color = cellBg,
-                            border = BorderStroke(if (isToday) 2.dp else 1.dp, cellBorder)
+                            border = BorderStroke(if (isToday) 1.8.dp else 0.9.dp, cellBorder)
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(horizontal = 6.dp, vertical = 7.dp),
+                                    .padding(horizontal = 4.dp, vertical = 6.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.SpaceBetween
                             ) {
@@ -283,22 +283,22 @@ fun ArrivalHistoryDialog(
                                 ) {
                                     Text(
                                         text = "${record.dayOfMonth}",
-                                        fontSize = 13.sp,
+                                        fontSize = 12.sp,
                                         fontWeight = if (isToday) FontWeight.Black else FontWeight.Bold,
                                         color = if (isToday) Color(0xFF4F46E5) else Color(0xFF1E293B)
                                     )
 
                                     if (isToday) {
                                         Surface(
-                                            shape = RoundedCornerShape(4.dp),
+                                            shape = RoundedCornerShape(3.dp),
                                             color = Color(0xFF4F46E5)
                                         ) {
                                             Text(
                                                 text = "TODAY",
-                                                fontSize = 6.5.sp,
+                                                fontSize = 5.5.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 color = Color.White,
-                                                modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)
+                                                modifier = Modifier.padding(horizontal = 2.dp, vertical = 0.5.dp)
                                             )
                                         }
                                     }
@@ -307,62 +307,64 @@ fun ArrivalHistoryDialog(
                                 // Arrival Punch Time
                                 Text(
                                     text = if (hasArrival) record.arrivalTime!! else "-- : --",
-                                    fontSize = 10.sp,
+                                    fontSize = 8.5.sp,
                                     fontWeight = if (hasArrival) FontWeight.Bold else FontWeight.Medium,
                                     color = if (hasArrival) Color(0xFF0F172A) else Color(0xFF94A3B8),
                                     textAlign = TextAlign.Center,
                                     maxLines = 1
                                 )
 
-                                // Premium Badge Pill
+                                // Badge Pill
                                 when {
                                     hasArrival && isOnTime -> {
                                         Surface(
-                                            shape = RoundedCornerShape(6.dp),
+                                            shape = RoundedCornerShape(5.dp),
                                             color = Color(0xFFDCFCE7),
                                             border = BorderStroke(0.8.dp, Color(0xFF86EFAC)),
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             Text(
                                                 text = "P • ON TIME",
-                                                fontSize = 8.sp,
+                                                fontSize = 7.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 color = Color(0xFF166534),
                                                 textAlign = TextAlign.Center,
-                                                modifier = Modifier.padding(vertical = 2.dp)
+                                                maxLines = 1,
+                                                modifier = Modifier.padding(vertical = 1.5.dp)
                                             )
                                         }
                                     }
                                     hasArrival && isLate -> {
                                         Surface(
-                                            shape = RoundedCornerShape(6.dp),
+                                            shape = RoundedCornerShape(5.dp),
                                             color = Color(0xFFFEF3C7),
                                             border = BorderStroke(0.8.dp, Color(0xFFFDE68A)),
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             Text(
                                                 text = "L • LATE",
-                                                fontSize = 8.sp,
+                                                fontSize = 7.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 color = Color(0xFF92400E),
                                                 textAlign = TextAlign.Center,
-                                                modifier = Modifier.padding(vertical = 2.dp)
+                                                maxLines = 1,
+                                                modifier = Modifier.padding(vertical = 1.5.dp)
                                             )
                                         }
                                     }
                                     else -> {
                                         Surface(
-                                            shape = RoundedCornerShape(6.dp),
+                                            shape = RoundedCornerShape(5.dp),
                                             color = Color(0xFFF1F5F9),
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             Text(
                                                 text = "-",
-                                                fontSize = 9.sp,
+                                                fontSize = 8.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color(0xFF94A3B8),
                                                 textAlign = TextAlign.Center,
-                                                modifier = Modifier.padding(vertical = 2.dp)
+                                                modifier = Modifier.padding(vertical = 1.5.dp)
                                             )
                                         }
                                     }
@@ -372,24 +374,24 @@ fun ArrivalHistoryDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // --- Footer Navigation & Hint ---
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(12.dp))
                         .background(Color(0xFFF1F5F9))
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("💡", fontSize = 12.sp)
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = "Long press any cell to edit punch",
-                            fontSize = 11.5.sp,
+                            text = "Long press cell to edit punch",
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF475569)
                         )
@@ -397,11 +399,11 @@ fun ArrivalHistoryDialog(
 
                     Button(
                         onClick = onDismiss,
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5)),
-                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 6.dp)
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
                     ) {
-                        Text("Done", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                        Text("Done", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -477,12 +479,12 @@ private fun PremiumKpiCard(
         border = BorderStroke(1.dp, borderColor)
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 7.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = label,
-                fontSize = 10.sp,
+                fontSize = 9.5.sp,
                 fontWeight = FontWeight.Bold,
                 color = themeColor.copy(alpha = 0.9f)
             )
@@ -490,17 +492,17 @@ private fun PremiumKpiCard(
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     text = value,
-                    fontSize = 16.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Black,
                     color = themeColor
                 )
                 Spacer(modifier = Modifier.width(3.dp))
                 Text(
                     text = suffix,
-                    fontSize = 10.sp,
+                    fontSize = 9.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = themeColor.copy(alpha = 0.8f),
-                    modifier = Modifier.padding(bottom = 1.5.dp)
+                    modifier = Modifier.padding(bottom = 1.dp)
                 )
             }
         }
