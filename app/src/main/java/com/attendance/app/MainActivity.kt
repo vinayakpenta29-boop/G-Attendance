@@ -1,7 +1,6 @@
 package com.attendance.app
 
 import android.Manifest
-import android.app.backup.BackupManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
@@ -77,12 +76,15 @@ class MainActivity : ComponentActivity() {
                     saveSettings()
                 },
                 onUpdateDay = { day ->
-                    val finalDay = if (day.workStatus == AttendanceStatus.ABSENT || day.workStatus == AttendanceStatus.HALF_DAY) {
-                        day.copy(dabbaStatus = DabbaStatus.ABSENT)
-                    } else {
-                        day
+                    val todayStr = LocalDate.now().toString()
+                    if (day.dateString == todayStr) {
+                        val trackerPrefs = getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
+                        // If user sets a specific Dabba code (e.g. D, G), record it so tracker honors it
+                        trackerPrefs.edit()
+                            .putString("${todayStr}_custom_dabba", day.dabbaStatus?.name)
+                            .commit()
                     }
-                    attendanceMap[finalDay.dateString] = finalDay
+                    attendanceMap[day.dateString] = day
                     saveAttendance()
                 },
                 onSetLocation = { setCurrentLocationAsWork() },
@@ -179,47 +181,73 @@ class MainActivity : ComponentActivity() {
             val wasInFirstHalf = trackerPrefs.getBoolean("${today}_h1", false)
             val wasInSecondHalf = trackerPrefs.getBoolean("${today}_h2", false)
             val recordedDabba = trackerPrefs.getString("${today}_dabba", null)
+            val customDabbaName = trackerPrefs.getString("${today}_custom_dabba", null)
 
-            if (currentRecord.isManual) {
-                if (arrivalTimeToSave != currentRecord.arrivalTime || arrivalStatusToSave != currentRecord.arrivalStatus) {
-                    attendanceMap[today] = currentRecord.copy(
-                        arrivalTime = arrivalTimeToSave,
-                        arrivalStatus = arrivalStatusToSave
-                    )
-                    saveAttendance()
-                }
-                return@addOnSuccessListener
-            }
+            val hasCompletedSecondHalf = wasInSecondHalf || (isInside && !now.isBefore(t1500))
 
             var newWorkStatus = currentRecord.safeWorkStatus
             var newDabbaStatus = currentRecord.safeDabbaStatus
 
-            val hasCompletedSecondHalf = wasInSecondHalf || (isInside && !now.isBefore(t1500))
-
             when {
                 !now.isBefore(t2100) -> {
-                    newWorkStatus = when {
-                        wasInFirstHalf && hasCompletedSecondHalf -> AttendanceStatus.PRESENT
-                        wasInFirstHalf || hasCompletedSecondHalf -> AttendanceStatus.HALF_DAY
-                        else -> AttendanceStatus.ABSENT
+                    if (wasInFirstHalf && hasCompletedSecondHalf) {
+                        newWorkStatus = AttendanceStatus.PRESENT
+                    } else if (wasInFirstHalf || hasCompletedSecondHalf) {
+                        newWorkStatus = AttendanceStatus.HALF_DAY
+                    } else if (newWorkStatus == AttendanceStatus.NOT_MARKED) {
+                        newWorkStatus = AttendanceStatus.ABSENT
                     }
-                    newDabbaStatus = if (newWorkStatus == AttendanceStatus.PRESENT) {
-                        when (recordedDabba) {
+
+                    if (!customDabbaName.isNullOrEmpty()) {
+                        try {
+                            newDabbaStatus = DabbaStatus.valueOf(customDabbaName)
+                        } catch (e: Exception) {
+                            newDabbaStatus = currentRecord.safeDabbaStatus
+                        }
+                    } else {
+                        newDabbaStatus = if (newWorkStatus == AttendanceStatus.PRESENT) {
+                            when (recordedDabba) {
+                                "P" -> DabbaStatus.PRESENT
+                                "L" -> DabbaStatus.L
+                                else -> DabbaStatus.ABSENT
+                            }
+                        } else {
+                            DabbaStatus.ABSENT
+                        }
+                    }
+                }
+
+                !now.isBefore(t1500) -> {
+                    if (newWorkStatus == AttendanceStatus.NOT_MARKED) {
+                        newWorkStatus = if (wasInFirstHalf) AttendanceStatus.HALF_DAY else AttendanceStatus.ABSENT
+                    }
+
+                    if (!customDabbaName.isNullOrEmpty()) {
+                        try {
+                            newDabbaStatus = DabbaStatus.valueOf(customDabbaName)
+                        } catch (e: Exception) {
+                            newDabbaStatus = currentRecord.safeDabbaStatus
+                        }
+                    } else {
+                        newDabbaStatus = when (recordedDabba) {
                             "P" -> DabbaStatus.PRESENT
                             "L" -> DabbaStatus.L
                             else -> DabbaStatus.ABSENT
                         }
-                    } else {
-                        DabbaStatus.ABSENT
                     }
                 }
-                !now.isBefore(t1500) -> {
-                    newWorkStatus = if (wasInFirstHalf) AttendanceStatus.HALF_DAY else AttendanceStatus.ABSENT
-                    newDabbaStatus = DabbaStatus.ABSENT
-                }
+
                 else -> {
-                    if (recordedDabba == "P") newDabbaStatus = DabbaStatus.PRESENT
-                    else if (recordedDabba == "L") newDabbaStatus = DabbaStatus.L
+                    if (!customDabbaName.isNullOrEmpty()) {
+                        try {
+                            newDabbaStatus = DabbaStatus.valueOf(customDabbaName)
+                        } catch (e: Exception) {
+                            newDabbaStatus = currentRecord.safeDabbaStatus
+                        }
+                    } else {
+                        if (recordedDabba == "P") newDabbaStatus = DabbaStatus.PRESENT
+                        else if (recordedDabba == "L") newDabbaStatus = DabbaStatus.L
+                    }
                 }
             }
 
@@ -291,17 +319,11 @@ class MainActivity : ComponentActivity() {
                         val workSt = raw.workStatus ?: AttendanceStatus.NOT_MARKED
                         val dabbaSt = raw.dabbaStatus ?: DabbaStatus.NOT_MARKED
 
-                        val finalDabba = if ((workSt == AttendanceStatus.ABSENT || workSt == AttendanceStatus.HALF_DAY) && dabbaSt != DabbaStatus.ABSENT) {
-                            DabbaStatus.ABSENT
-                        } else {
-                            dabbaSt
-                        }
-
                         sanitized[key] = DayAttendance(
                             dateString = if (raw.dateString.isBlank()) key else raw.dateString,
                             dayOfMonth = if (raw.dayOfMonth <= 0) 1 else raw.dayOfMonth,
                             workStatus = workSt,
-                            dabbaStatus = finalDabba,
+                            dabbaStatus = dabbaSt,
                             isManual = raw.isManual,
                             isHoliday = raw.isHoliday,
                             holidayName = raw.holidayName ?: "",
@@ -341,8 +363,6 @@ class MainActivity : ComponentActivity() {
         try {
             val sp = getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
             sp.edit().putString("records", gson.toJson(attendanceMap)).commit()
-            // Alert Android BackupManager of new cloud backup data
-            BackupManager.dataChanged(packageName)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -352,8 +372,6 @@ class MainActivity : ComponentActivity() {
         try {
             val sp = getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
             sp.edit().putString("settings", gson.toJson(settings)).commit()
-            // Alert Android BackupManager of new cloud backup data
-            BackupManager.dataChanged(packageName)
         } catch (e: Exception) {
             e.printStackTrace()
         }
