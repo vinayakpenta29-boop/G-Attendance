@@ -18,6 +18,7 @@
 
     <application
         android:allowBackup="false"
+        android:largeHeap="true"
         android:icon="@drawable/ic_app_icon"
         android:roundIcon="@drawable/ic_app_icon"
         android:label="G-Attendance"
