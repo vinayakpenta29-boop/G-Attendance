@@ -2,7 +2,6 @@ package com.attendance.app
 
 import android.app.AlarmManager
 import android.app.PendingIntent
-import android.app.backup.BackupManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -240,6 +239,7 @@ class LocationTrackerReceiver : BroadcastReceiver() {
         val wasInFirstHalf = trackerPrefs.getBoolean("${today}_h1", false)
         val wasInSecondHalf = trackerPrefs.getBoolean("${today}_h2", false)
         val recordedDabba = trackerPrefs.getString("${today}_dabba", null)
+        val customDabbaName = trackerPrefs.getString("${today}_custom_dabba", null)
 
         val dbPrefs = context.getSharedPreferences("attendance_db", Context.MODE_PRIVATE)
         val json = dbPrefs.getString("records", null)
@@ -264,56 +264,81 @@ class LocationTrackerReceiver : BroadcastReceiver() {
             recordedArrivalStatusToSave ?: trackerPrefs.getString("${today}_arrival_status", "")
         }
 
-        if (existingDay.isManual) {
-            if (finalArrivalTime != existingDay.arrivalTime || finalArrivalStatus != existingDay.arrivalStatus) {
-                map[today] = existingDay.copy(
-                    arrivalTime = finalArrivalTime,
-                    arrivalStatus = finalArrivalStatus
-                )
-                dbPrefs.edit().putString("records", gson.toJson(map)).commit()
-                BackupManager.dataChanged(context.packageName)
-            }
-            return
-        }
+        val hasCompletedSecondHalf = wasInSecondHalf || (isInside && !now.isBefore(t1500))
 
         var newWorkStatus: AttendanceStatus = existingDay.safeWorkStatus
         var newDabbaStatus: DabbaStatus = existingDay.safeDabbaStatus
 
-        val hasCompletedSecondHalf = wasInSecondHalf || (isInside && !now.isBefore(t1500))
-
         when {
+            // AFTER 9:00 PM: Complete second shift check
             !now.isBefore(t2100) -> {
-                newWorkStatus = when {
-                    wasInFirstHalf && hasCompletedSecondHalf -> AttendanceStatus.PRESENT
-                    wasInFirstHalf || hasCompletedSecondHalf -> AttendanceStatus.HALF_DAY
-                    else -> AttendanceStatus.ABSENT
+                // If user worked both halves, upgrade to PRESENT
+                if (wasInFirstHalf && hasCompletedSecondHalf) {
+                    newWorkStatus = AttendanceStatus.PRESENT
+                } else if (wasInFirstHalf || hasCompletedSecondHalf) {
+                    newWorkStatus = AttendanceStatus.HALF_DAY
+                } else if (newWorkStatus == AttendanceStatus.NOT_MARKED) {
+                    newWorkStatus = AttendanceStatus.ABSENT
                 }
 
-                newDabbaStatus = if (newWorkStatus == AttendanceStatus.PRESENT) {
-                    when (recordedDabba) {
+                // If user manually chose a custom Dabba code (e.g. "D", "G"), preserve it
+                if (!customDabbaName.isNullOrEmpty()) {
+                    try {
+                        newDabbaStatus = DabbaStatus.valueOf(customDabbaName)
+                    } catch (e: Exception) {
+                        newDabbaStatus = existingDay.safeDabbaStatus
+                    }
+                } else {
+                    newDabbaStatus = if (newWorkStatus == AttendanceStatus.PRESENT) {
+                        when (recordedDabba) {
+                            "P" -> DabbaStatus.PRESENT
+                            "L" -> DabbaStatus.L
+                            else -> DabbaStatus.ABSENT
+                        }
+                    } else {
+                        DabbaStatus.ABSENT
+                    }
+                }
+            }
+
+            // 3:00 PM - 9:00 PM: First shift completed, second shift in progress
+            !now.isBefore(t1500) -> {
+                if (newWorkStatus == AttendanceStatus.NOT_MARKED) {
+                    newWorkStatus = if (wasInFirstHalf) AttendanceStatus.HALF_DAY else AttendanceStatus.ABSENT
+                }
+
+                if (!customDabbaName.isNullOrEmpty()) {
+                    try {
+                        newDabbaStatus = DabbaStatus.valueOf(customDabbaName)
+                    } catch (e: Exception) {
+                        newDabbaStatus = existingDay.safeDabbaStatus
+                    }
+                } else {
+                    // Keep on-time status intact while shift is underway
+                    newDabbaStatus = when (recordedDabba) {
                         "P" -> DabbaStatus.PRESENT
                         "L" -> DabbaStatus.L
                         else -> DabbaStatus.ABSENT
                     }
-                } else {
-                    DabbaStatus.ABSENT
                 }
             }
 
-            !now.isBefore(t1500) -> {
-                newWorkStatus = if (wasInFirstHalf) AttendanceStatus.HALF_DAY else AttendanceStatus.ABSENT
-                newDabbaStatus = DabbaStatus.ABSENT
-            }
-
+            // Before 3:00 PM: First shift in progress
             else -> {
-                if (recordedDabba == "P") {
-                    newDabbaStatus = DabbaStatus.PRESENT
-                } else if (recordedDabba == "L") {
-                    newDabbaStatus = DabbaStatus.L
+                if (!customDabbaName.isNullOrEmpty()) {
+                    try {
+                        newDabbaStatus = DabbaStatus.valueOf(customDabbaName)
+                    } catch (e: Exception) {
+                        newDabbaStatus = existingDay.safeDabbaStatus
+                    }
+                } else {
+                    if (recordedDabba == "P") newDabbaStatus = DabbaStatus.PRESENT
+                    else if (recordedDabba == "L") newDabbaStatus = DabbaStatus.L
                 }
             }
         }
 
+        // Save back to DB, preserving sales, holiday/amavasya, and custom selections
         map[today] = existingDay.copy(
             workStatus = newWorkStatus,
             dabbaStatus = newDabbaStatus,
@@ -325,7 +350,5 @@ class LocationTrackerReceiver : BroadcastReceiver() {
             arrivalStatus = finalArrivalStatus
         )
         dbPrefs.edit().putString("records", gson.toJson(map)).commit()
-        // Alert Android BackupManager of new cloud backup data
-        BackupManager.dataChanged(context.packageName)
     }
 }
