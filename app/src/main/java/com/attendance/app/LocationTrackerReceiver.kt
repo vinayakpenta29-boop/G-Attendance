@@ -270,9 +270,8 @@ class LocationTrackerReceiver : BroadcastReceiver() {
         var newDabbaStatus: DabbaStatus = existingDay.safeDabbaStatus
 
         when {
-            // AFTER 9:00 PM: Complete second shift check
+            // AFTER 9:00 PM: Second shift completed
             !now.isBefore(t2100) -> {
-                // If user worked both halves, upgrade to PRESENT
                 if (wasInFirstHalf && hasCompletedSecondHalf) {
                     newWorkStatus = AttendanceStatus.PRESENT
                 } else if (wasInFirstHalf || hasCompletedSecondHalf) {
@@ -281,23 +280,16 @@ class LocationTrackerReceiver : BroadcastReceiver() {
                     newWorkStatus = AttendanceStatus.ABSENT
                 }
 
-                // If user manually chose a custom Dabba code (e.g. "D", "G"), preserve it
-                if (!customDabbaName.isNullOrEmpty()) {
-                    try {
-                        newDabbaStatus = DabbaStatus.valueOf(customDabbaName)
-                    } catch (e: Exception) {
-                        newDabbaStatus = existingDay.safeDabbaStatus
+                newDabbaStatus = if (customDabbaName == "D" || customDabbaName == "G") {
+                    DabbaStatus.valueOf(customDabbaName)
+                } else if (newWorkStatus == AttendanceStatus.PRESENT) {
+                    when (recordedDabba) {
+                        "P" -> DabbaStatus.PRESENT
+                        "L" -> DabbaStatus.L
+                        else -> DabbaStatus.ABSENT
                     }
                 } else {
-                    newDabbaStatus = if (newWorkStatus == AttendanceStatus.PRESENT) {
-                        when (recordedDabba) {
-                            "P" -> DabbaStatus.PRESENT
-                            "L" -> DabbaStatus.L
-                            else -> DabbaStatus.ABSENT
-                        }
-                    } else {
-                        DabbaStatus.ABSENT
-                    }
+                    DabbaStatus.ABSENT
                 }
             }
 
@@ -307,38 +299,27 @@ class LocationTrackerReceiver : BroadcastReceiver() {
                     newWorkStatus = if (wasInFirstHalf) AttendanceStatus.HALF_DAY else AttendanceStatus.ABSENT
                 }
 
-                if (!customDabbaName.isNullOrEmpty()) {
-                    try {
-                        newDabbaStatus = DabbaStatus.valueOf(customDabbaName)
-                    } catch (e: Exception) {
-                        newDabbaStatus = existingDay.safeDabbaStatus
-                    }
+                newDabbaStatus = if (customDabbaName == "D" || customDabbaName == "G") {
+                    DabbaStatus.valueOf(customDabbaName)
                 } else {
-                    // Keep on-time status intact while shift is underway
-                    newDabbaStatus = when (recordedDabba) {
-                        "P" -> DabbaStatus.PRESENT
-                        "L" -> DabbaStatus.L
-                        else -> DabbaStatus.ABSENT
-                    }
+                    DabbaStatus.ABSENT
                 }
             }
 
             // Before 3:00 PM: First shift in progress
             else -> {
-                if (!customDabbaName.isNullOrEmpty()) {
-                    try {
-                        newDabbaStatus = DabbaStatus.valueOf(customDabbaName)
-                    } catch (e: Exception) {
-                        newDabbaStatus = existingDay.safeDabbaStatus
-                    }
+                newDabbaStatus = if (customDabbaName == "D" || customDabbaName == "G") {
+                    DabbaStatus.valueOf(customDabbaName)
                 } else {
-                    if (recordedDabba == "P") newDabbaStatus = DabbaStatus.PRESENT
-                    else if (recordedDabba == "L") newDabbaStatus = DabbaStatus.L
+                    when (recordedDabba) {
+                        "P" -> DabbaStatus.PRESENT
+                        "L" -> DabbaStatus.L
+                        else -> existingDay.safeDabbaStatus
+                    }
                 }
             }
         }
 
-        // Save back to DB, preserving sales, holiday/amavasya, and custom selections
         map[today] = existingDay.copy(
             workStatus = newWorkStatus,
             dabbaStatus = newDabbaStatus,
