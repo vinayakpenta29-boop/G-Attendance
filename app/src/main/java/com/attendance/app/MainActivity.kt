@@ -79,10 +79,16 @@ class MainActivity : ComponentActivity() {
                     val todayStr = LocalDate.now().toString()
                     if (day.dateString == todayStr) {
                         val trackerPrefs = getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
-                        // If user sets a specific Dabba code (e.g. D, G), record it so tracker honors it
-                        trackerPrefs.edit()
-                            .putString("${todayStr}_custom_dabba", day.dabbaStatus?.name)
-                            .commit()
+                        // Only treat D and G as custom Dabba overrides so auto P/L restoration isn't blocked
+                        if (day.dabbaStatus == DabbaStatus.D || day.dabbaStatus == DabbaStatus.G) {
+                            trackerPrefs.edit()
+                                .putString("${todayStr}_custom_dabba", day.dabbaStatus.name)
+                                .commit()
+                        } else {
+                            trackerPrefs.edit()
+                                .remove("${todayStr}_custom_dabba")
+                                .commit()
+                        }
                     }
                     attendanceMap[day.dateString] = day
                     saveAttendance()
@@ -189,6 +195,7 @@ class MainActivity : ComponentActivity() {
             var newDabbaStatus = currentRecord.safeDabbaStatus
 
             when {
+                // AFTER 9:00 PM: Second shift completed
                 !now.isBefore(t2100) -> {
                     if (wasInFirstHalf && hasCompletedSecondHalf) {
                         newWorkStatus = AttendanceStatus.PRESENT
@@ -198,55 +205,42 @@ class MainActivity : ComponentActivity() {
                         newWorkStatus = AttendanceStatus.ABSENT
                     }
 
-                    if (!customDabbaName.isNullOrEmpty()) {
-                        try {
-                            newDabbaStatus = DabbaStatus.valueOf(customDabbaName)
-                        } catch (e: Exception) {
-                            newDabbaStatus = currentRecord.safeDabbaStatus
+                    newDabbaStatus = if (customDabbaName == "D" || customDabbaName == "G") {
+                        DabbaStatus.valueOf(customDabbaName)
+                    } else if (newWorkStatus == AttendanceStatus.PRESENT) {
+                        when (recordedDabba) {
+                            "P" -> DabbaStatus.PRESENT
+                            "L" -> DabbaStatus.L
+                            else -> DabbaStatus.ABSENT
                         }
                     } else {
-                        newDabbaStatus = if (newWorkStatus == AttendanceStatus.PRESENT) {
-                            when (recordedDabba) {
-                                "P" -> DabbaStatus.PRESENT
-                                "L" -> DabbaStatus.L
-                                else -> DabbaStatus.ABSENT
-                            }
-                        } else {
-                            DabbaStatus.ABSENT
-                        }
+                        DabbaStatus.ABSENT
                     }
                 }
 
+                // 3:00 PM - 9:00 PM: First shift completed, second shift in progress
                 !now.isBefore(t1500) -> {
                     if (newWorkStatus == AttendanceStatus.NOT_MARKED) {
                         newWorkStatus = if (wasInFirstHalf) AttendanceStatus.HALF_DAY else AttendanceStatus.ABSENT
                     }
 
-                    if (!customDabbaName.isNullOrEmpty()) {
-                        try {
-                            newDabbaStatus = DabbaStatus.valueOf(customDabbaName)
-                        } catch (e: Exception) {
-                            newDabbaStatus = currentRecord.safeDabbaStatus
-                        }
+                    newDabbaStatus = if (customDabbaName == "D" || customDabbaName == "G") {
+                        DabbaStatus.valueOf(customDabbaName)
                     } else {
-                        newDabbaStatus = when (recordedDabba) {
-                            "P" -> DabbaStatus.PRESENT
-                            "L" -> DabbaStatus.L
-                            else -> DabbaStatus.ABSENT
-                        }
+                        DabbaStatus.ABSENT
                     }
                 }
 
+                // Before 3:00 PM: First shift in progress
                 else -> {
-                    if (!customDabbaName.isNullOrEmpty()) {
-                        try {
-                            newDabbaStatus = DabbaStatus.valueOf(customDabbaName)
-                        } catch (e: Exception) {
-                            newDabbaStatus = currentRecord.safeDabbaStatus
-                        }
+                    newDabbaStatus = if (customDabbaName == "D" || customDabbaName == "G") {
+                        DabbaStatus.valueOf(customDabbaName)
                     } else {
-                        if (recordedDabba == "P") newDabbaStatus = DabbaStatus.PRESENT
-                        else if (recordedDabba == "L") newDabbaStatus = DabbaStatus.L
+                        when (recordedDabba) {
+                            "P" -> DabbaStatus.PRESENT
+                            "L" -> DabbaStatus.L
+                            else -> currentRecord.safeDabbaStatus
+                        }
                     }
                 }
             }
