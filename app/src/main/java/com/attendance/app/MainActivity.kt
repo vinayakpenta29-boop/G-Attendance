@@ -79,10 +79,10 @@ class MainActivity : ComponentActivity() {
                     val todayStr = LocalDate.now().toString()
                     if (day.dateString == todayStr) {
                         val trackerPrefs = getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
-                        // Only treat D and G as custom Dabba overrides so auto P/L restoration isn't blocked
-                        if (day.dabbaStatus == DabbaStatus.D || day.dabbaStatus == DabbaStatus.G) {
+                        val dabba = day.dabbaStatus
+                        if (dabba == DabbaStatus.D || dabba == DabbaStatus.G) {
                             trackerPrefs.edit()
-                                .putString("${todayStr}_custom_dabba", day.dabbaStatus.name)
+                                .putString("${todayStr}_custom_dabba", dabba.name)
                                 .commit()
                         } else {
                             trackerPrefs.edit()
