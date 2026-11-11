@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -64,6 +65,7 @@ fun AttendanceScreen(
     var showLeavesHistoryDialog by remember { mutableStateOf(false) }
     var showArrivalHistoryDialog by remember { mutableStateOf(false) }
     var showCalendarPdfDialog by remember { mutableStateOf(false) }
+    var showAnnualIncentiveDialog by remember { mutableStateOf(false) }
     var showGpsConfirmDialog by remember { mutableStateOf(false) }
     var showRestoreConfirmDialog by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -161,14 +163,16 @@ fun AttendanceScreen(
                 modifier = Modifier.shadow(2.dp),
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Clickable Rupee Icon to open Annual Incentive & Salary Increment Hub
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
+                                .size(34.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Brush.linearGradient(listOf(BrandPrimary, BrandSecondary))),
+                                .background(Brush.linearGradient(listOf(BrandPrimary, BrandSecondary)))
+                                .clickable { showAnnualIncentiveDialog = true },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("₹", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                            Text("₹", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 19.sp)
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
@@ -406,6 +410,15 @@ fun AttendanceScreen(
                 }
             }
         }
+    }
+
+    // --- Annual Incentive Dialog ---
+    if (showAnnualIncentiveDialog) {
+        AnnualIncentiveDialog(
+            initialYear = displayedMonth.year,
+            attendanceMap = attendanceMap,
+            onDismiss = { showAnnualIncentiveDialog = false }
+        )
     }
 
     // --- Restore Confirmation Dialog ---
