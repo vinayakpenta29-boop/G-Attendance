@@ -1,13 +1,16 @@
 package com.attendance.app
 
+import android.Manifest
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Build
 import android.os.PowerManager
+import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
@@ -22,8 +25,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class LocationTrackerReceiver : BroadcastReceiver() {
@@ -38,24 +39,33 @@ class LocationTrackerReceiver : BroadcastReceiver() {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
             val now = LocalDateTime.now()
             val time = now.toLocalTime()
-            val today = LocalDate.now().toString()
 
-            val prefs = context.getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
-            val isArrivalLogged = prefs.getBoolean("${today}_arrival_logged", false)
+            val isArrivalLogged = ArrivalPunchHelper.isTodayArrivalLogged(context)
 
-            val t1000 = LocalTime.of(10, 0)
-            val t1030 = LocalTime.of(10, 30)
+            val t0955 = LocalTime.of(9, 55)
+            val t1115 = LocalTime.of(11, 15)
             val t1500 = LocalTime.of(15, 0)
             val t2100 = LocalTime.of(21, 0)
             val t2130 = LocalTime.of(21, 30)
 
+            // Start Foreground Arrival Service during morning arrival window until arrival is punched
+            if (!time.isBefore(t0955) && time.isBefore(t1115) && !isArrivalLogged) {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                    try {
+                        ContextCompat.startForegroundService(context, Intent(context, ArrivalPunchService::class.java))
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+
             val nextRunTime: LocalDateTime = when {
-                time.isBefore(t1000) -> now.withHour(10).withMinute(0).withSecond(0).withNano(0)
-                time.isBefore(t1030) -> {
+                time.isBefore(t0955) -> now.withHour(9).withMinute(55).withSecond(0).withNano(0)
+                time.isBefore(t1115) -> {
                     if (!isArrivalLogged) {
                         now.plusMinutes(1).withSecond(0).withNano(0)
                     } else {
-                        now.withHour(10).withMinute(30).withSecond(0).withNano(0)
+                        now.withHour(11).withMinute(15).withSecond(0).withNano(0)
                     }
                 }
                 time.isBefore(t1500) -> {
@@ -75,7 +85,7 @@ class LocationTrackerReceiver : BroadcastReceiver() {
                     }
                 }
                 time.isBefore(t2130) -> now.plusMinutes(10).withSecond(0).withNano(0)
-                else -> now.plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0)
+                else -> now.plusDays(1).withHour(9).withMinute(55).withSecond(0).withNano(0)
             }
 
             val triggerMillis = nextRunTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -110,6 +120,13 @@ class LocationTrackerReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent?.action == Intent.ACTION_BOOT_COMPLETED || intent?.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
+            val prefs = context.getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
+            val lat = prefs.getFloat("work_lat", 0f).toDouble()
+            val lng = prefs.getFloat("work_lng", 0f).toDouble()
+            val radius = prefs.getFloat("work_radius", 150f)
+            if (lat != 0.0 || lng != 0.0) {
+                GeofenceHelper.registerWorkplaceGeofence(context, lat, lng, radius)
+            }
             scheduleNext(context)
             return
         }
@@ -184,6 +201,13 @@ class LocationTrackerReceiver : BroadcastReceiver() {
             false
         }
 
+        if (isInside && location != null) {
+            val punched = ArrivalPunchHelper.recordExactArrivalIfNeeded(context, location.time)
+            if (punched) {
+                context.stopService(Intent(context, ArrivalPunchService::class.java))
+            }
+        }
+
         evaluateAttendance(context, isInside, prefs)
     }
 
@@ -196,25 +220,7 @@ class LocationTrackerReceiver : BroadcastReceiver() {
         val t1500 = LocalTime.of(15, 0)
         val t2100 = LocalTime.of(21, 0)
 
-        var recordedArrivalTimeToSave: String? = null
-        var recordedArrivalStatusToSave: String? = null
-
         if (isInside) {
-            val isArrivalLogged = trackerPrefs.getBoolean("${today}_arrival_logged", false)
-            if (!isArrivalLogged) {
-                val formattedNow = now.format(DateTimeFormatter.ofPattern("hh:mm a", Locale.ENGLISH))
-                val status = if (!now.isAfter(t1015)) "P" else "L"
-
-                trackerPrefs.edit()
-                    .putBoolean("${today}_arrival_logged", true)
-                    .putString("${today}_arrival_time", formattedNow)
-                    .putString("${today}_arrival_status", status)
-                    .commit()
-
-                recordedArrivalTimeToSave = formattedNow
-                recordedArrivalStatusToSave = status
-            }
-
             val isAlreadyPresentBefore1015 = trackerPrefs.getBoolean("${today}_present_before_1015", false)
             val currentDabbaPref = trackerPrefs.getString("${today}_dabba", null)
             if (!now.isAfter(t1015)) {
@@ -255,13 +261,13 @@ class LocationTrackerReceiver : BroadcastReceiver() {
         val finalArrivalTime = if (!existingDay.arrivalTime.isNullOrBlank()) {
             existingDay.arrivalTime
         } else {
-            recordedArrivalTimeToSave ?: trackerPrefs.getString("${today}_arrival_time", "")
+            trackerPrefs.getString("${today}_arrival_time", "")
         }
 
         val finalArrivalStatus = if (!existingDay.arrivalStatus.isNullOrBlank()) {
             existingDay.arrivalStatus
         } else {
-            recordedArrivalStatusToSave ?: trackerPrefs.getString("${today}_arrival_status", "")
+            trackerPrefs.getString("${today}_arrival_status", "")
         }
 
         val hasCompletedSecondHalf = wasInSecondHalf || (isInside && !now.isBefore(t1500))
@@ -270,7 +276,6 @@ class LocationTrackerReceiver : BroadcastReceiver() {
         var newDabbaStatus: DabbaStatus = existingDay.safeDabbaStatus
 
         when {
-            // AFTER 9:00 PM: Second shift completed
             !now.isBefore(t2100) -> {
                 if (wasInFirstHalf && hasCompletedSecondHalf) {
                     newWorkStatus = AttendanceStatus.PRESENT
@@ -293,7 +298,6 @@ class LocationTrackerReceiver : BroadcastReceiver() {
                 }
             }
 
-            // 3:00 PM - 9:00 PM: First shift completed, second shift in progress
             !now.isBefore(t1500) -> {
                 if (newWorkStatus == AttendanceStatus.NOT_MARKED) {
                     newWorkStatus = if (wasInFirstHalf) AttendanceStatus.HALF_DAY else AttendanceStatus.ABSENT
@@ -306,7 +310,6 @@ class LocationTrackerReceiver : BroadcastReceiver() {
                 }
             }
 
-            // Before 3:00 PM: First shift in progress
             else -> {
                 newDabbaStatus = if (customDabbaName == "D" || customDabbaName == "G") {
                     DabbaStatus.valueOf(customDabbaName)
