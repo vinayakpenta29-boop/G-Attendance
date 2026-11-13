@@ -25,6 +25,18 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
+        <!-- Hardware Geofence Transition Receiver for Instant Arrival Punch -->
+        <receiver
+            android:name=".GeofenceBroadcastReceiver"
+            android:exported="true" />
+
+        <!-- Morning Arrival Window Foreground Location Service (Auto-stops once punched) -->
+        <service
+            android:name=".ArrivalPunchService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
         <!-- Exact Background Location Tracker Receiver -->
         <receiver
             android:name=".LocationTrackerReceiver"
