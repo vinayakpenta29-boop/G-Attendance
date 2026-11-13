@@ -2,6 +2,7 @@ package com.attendance.app
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Build
@@ -25,8 +26,6 @@ import java.lang.reflect.Type
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 class MainActivity : ComponentActivity() {
 
@@ -34,12 +33,46 @@ class MainActivity : ComponentActivity() {
     private val attendanceMap = mutableStateMapOf<String, DayAttendance>()
     private var settings by mutableStateOf(SalarySettings())
 
+    private val backgroundLocationLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted && (settings.workLatitude != 0.0 || settings.workLongitude != 0.0)) {
+            GeofenceHelper.registerWorkplaceGeofence(
+                this,
+                settings.workLatitude,
+                settings.workLongitude,
+                settings.geofenceRadiusMeters
+            )
+        }
+    }
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        ) {
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+
+        if (fineGranted || coarseGranted) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED
+            ) {
+                Toast.makeText(
+                    this,
+                    "Select 'Allow all the time' for exact background arrival punch",
+                    Toast.LENGTH_LONG
+                ).show()
+                backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            }
+
+            if (settings.workLatitude != 0.0 || settings.workLongitude != 0.0) {
+                GeofenceHelper.registerWorkplaceGeofence(
+                    this,
+                    settings.workLatitude,
+                    settings.workLongitude,
+                    settings.geofenceRadiusMeters
+                )
+            }
+
             try {
                 LocationTrackerReceiver.scheduleNext(this)
                 checkLiveLocationAtWorkplace()
@@ -54,6 +87,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         loadData()
         requestPermissions()
+
+        if (settings.workLatitude != 0.0 || settings.workLongitude != 0.0) {
+            GeofenceHelper.registerWorkplaceGeofence(
+                this,
+                settings.workLatitude,
+                settings.workLongitude,
+                settings.geofenceRadiusMeters
+            )
+        }
 
         try {
             LocationTrackerReceiver.scheduleNext(this)
@@ -74,6 +116,14 @@ class MainActivity : ComponentActivity() {
                 onSaveSettings = { updated ->
                     settings = updated
                     saveSettings()
+                    if (updated.workLatitude != 0.0 || updated.workLongitude != 0.0) {
+                        GeofenceHelper.registerWorkplaceGeofence(
+                            this,
+                            updated.workLatitude,
+                            updated.workLongitude,
+                            updated.geofenceRadiusMeters
+                        )
+                    }
                 },
                 onUpdateDay = { day ->
                     val todayStr = LocalDate.now().toString()
@@ -107,6 +157,14 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         loadData()
+        if (settings.workLatitude != 0.0 || settings.workLongitude != 0.0) {
+            GeofenceHelper.registerWorkplaceGeofence(
+                this,
+                settings.workLatitude,
+                settings.workLongitude,
+                settings.geofenceRadiusMeters
+            )
+        }
         try {
             LocationTrackerReceiver.scheduleNext(this)
             checkLiveLocationAtWorkplace()
@@ -134,6 +192,14 @@ class MainActivity : ComponentActivity() {
             val tolerance = location.accuracy.coerceAtMost(60f)
             val isInside = results[0] <= (settings.geofenceRadiusMeters + tolerance)
 
+            if (isInside) {
+                val punched = ArrivalPunchHelper.recordExactArrivalIfNeeded(this, location.time)
+                if (punched) {
+                    stopService(Intent(this, ArrivalPunchService::class.java))
+                    loadData()
+                }
+            }
+
             val trackerPrefs = getSharedPreferences("attendance_prefs", Context.MODE_PRIVATE)
             val now = LocalTime.now()
             val today = LocalDate.now().toString()
@@ -144,25 +210,12 @@ class MainActivity : ComponentActivity() {
             val t2100 = LocalTime.of(21, 0)
 
             val currentRecord = attendanceMap[today] ?: DayAttendance(dateString = today, dayOfMonth = dayNum)
-            var arrivalTimeToSave = currentRecord.arrivalTime
-            var arrivalStatusToSave = currentRecord.arrivalStatus
+            val arrivalTimeToSave = currentRecord.arrivalTime?.takeIf { it.isNotBlank() }
+                ?: trackerPrefs.getString("${today}_arrival_time", "")
+            val arrivalStatusToSave = currentRecord.arrivalStatus?.takeIf { it.isNotBlank() }
+                ?: trackerPrefs.getString("${today}_arrival_status", "")
 
             if (isInside) {
-                val isArrivalLogged = trackerPrefs.getBoolean("${today}_arrival_logged", false)
-                if (!isArrivalLogged && arrivalTimeToSave.isNullOrBlank()) {
-                    val formattedNow = now.format(DateTimeFormatter.ofPattern("hh:mm a", Locale.ENGLISH))
-                    val status = if (!now.isAfter(t1015)) "P" else "L"
-
-                    trackerPrefs.edit()
-                        .putBoolean("${today}_arrival_logged", true)
-                        .putString("${today}_arrival_time", formattedNow)
-                        .putString("${today}_arrival_status", status)
-                        .commit()
-
-                    arrivalTimeToSave = formattedNow
-                    arrivalStatusToSave = status
-                }
-
                 val isAlreadyPresentBefore1015 = trackerPrefs.getBoolean("${today}_present_before_1015", false)
                 val currentDabbaPref = trackerPrefs.getString("${today}_dabba", null)
                 if (!now.isAfter(t1015)) {
@@ -195,7 +248,6 @@ class MainActivity : ComponentActivity() {
             var newDabbaStatus = currentRecord.safeDabbaStatus
 
             when {
-                // AFTER 9:00 PM: Second shift completed
                 !now.isBefore(t2100) -> {
                     if (wasInFirstHalf && hasCompletedSecondHalf) {
                         newWorkStatus = AttendanceStatus.PRESENT
@@ -218,7 +270,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // 3:00 PM - 9:00 PM: First shift completed, second shift in progress
                 !now.isBefore(t1500) -> {
                     if (newWorkStatus == AttendanceStatus.NOT_MARKED) {
                         newWorkStatus = if (wasInFirstHalf) AttendanceStatus.HALF_DAY else AttendanceStatus.ABSENT
@@ -231,7 +282,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Before 3:00 PM: First shift in progress
                 else -> {
                     newDabbaStatus = if (customDabbaName == "D" || customDabbaName == "G") {
                         DabbaStatus.valueOf(customDabbaName)
@@ -279,6 +329,12 @@ class MainActivity : ComponentActivity() {
                         .putFloat("work_lng", loc.longitude.toFloat())
                         .commit()
                     saveSettings()
+                    GeofenceHelper.registerWorkplaceGeofence(
+                        this,
+                        loc.latitude,
+                        loc.longitude,
+                        settings.geofenceRadiusMeters
+                    )
                     Toast.makeText(this, "Workplace GPS locked successfully!", Toast.LENGTH_LONG).show()
                 } else {
                     Toast.makeText(this, "Could not acquire GPS. Turn ON device location.", Toast.LENGTH_LONG).show()
