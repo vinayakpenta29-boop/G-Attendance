@@ -92,7 +92,8 @@ object SalaryCalculator {
                 pfVal +
                 settings.medicalFund
 
-        val grandTotal = (settings.netMonthlySalary + 900.0 + leaveBonus + fifthMondayBonus + schemeVal) - totalDeduction
+        val grandTotal = ((settings.netMonthlySalary + leaveBonus + fifthMondayBonus + schemeVal) - totalDeduction)
+            .coerceAtLeast(0.0)
 
         return SalaryReport(
             netMonthlySalary = settings.netMonthlySalary,
