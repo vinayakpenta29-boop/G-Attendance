@@ -15,6 +15,7 @@ data class SalaryReport(
     val professionalTax: Double,
     val pfDeduction: Double,
     val medicalDeduction: Double,
+    val dabbaAllowance: Double,
     val dabbaAbsentDays: Int,
     val perDayDabbaAmount: Double,
     val dabbaDeduction: Double,
@@ -32,7 +33,8 @@ object SalaryCalculator {
     ): SalaryReport {
         val daysInMonth = yearMonth.lengthOfMonth()
         val perDaySalary = settings.netMonthlySalary / daysInMonth
-        val perDayDabba = 900.0 / daysInMonth
+        val monthlyDabbaAllowance = 900.0
+        val perDayDabba = monthlyDabbaAllowance / daysInMonth
 
         var absentDays = 0.0
         var halfDays = 0.0
@@ -79,9 +81,9 @@ object SalaryCalculator {
         }
         val fifthMondayBonus = if (mondayCount >= 5) perDaySalary else 0.0
 
-        // Dabba calculations
-        val dabbaDeduction = dabbaAbsentCount * perDayDabba
-        val netDabbaEarned = (900.0 - dabbaDeduction).coerceAtLeast(0.0)
+        // Deduct missed Dabba days strictly from the ₹900 Dabba allowance (never from ₹17,100 salary)
+        val dabbaDeduction = (dabbaAbsentCount * perDayDabba).coerceAtMost(monthlyDabbaAllowance)
+        val netDabbaEarned = (monthlyDabbaAllowance - dabbaDeduction).coerceAtLeast(0.0)
 
         val pfVal = if (settings.isPfApplicable) settings.pfAmount else 0.0
         val schemeVal = if (settings.isSchemeApplicable) settings.schemeAmount else 0.0
@@ -92,7 +94,7 @@ object SalaryCalculator {
                 pfVal +
                 settings.medicalFund
 
-        val grandTotal = ((settings.netMonthlySalary + leaveBonus + fifthMondayBonus + schemeVal) - totalDeduction)
+        val grandTotal = ((settings.netMonthlySalary + monthlyDabbaAllowance + leaveBonus + fifthMondayBonus + schemeVal) - totalDeduction)
             .coerceAtLeast(0.0)
 
         return SalaryReport(
@@ -107,6 +109,7 @@ object SalaryCalculator {
             professionalTax = settings.professionalTax,
             pfDeduction = pfVal,
             medicalDeduction = settings.medicalFund,
+            dabbaAllowance = monthlyDabbaAllowance,
             dabbaAbsentDays = dabbaAbsentCount,
             perDayDabbaAmount = perDayDabba,
             dabbaDeduction = dabbaDeduction,
