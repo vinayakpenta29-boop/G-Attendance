@@ -55,11 +55,10 @@ fun Modifier.snakeRunningBorder(
     cornerRadius: Dp = 8.dp,
     trackColor: Color = Color(0xFFE0E7FF),
     snakeColors: List<Color> = listOf(
-        Color(0xFFEF476F), // Google Blue
-        Color(0xFFFFD166), // Google Red
-        Color(0xFF06D6A0), // Google Yellow
-        Color(0xFF118AB2) // Google Green
-        
+        Color(0xFFEF476F),
+        Color(0xFFFFD166),
+        Color(0xFF06D6A0),
+        Color(0xFF118AB2)
     ),
     durationMillis: Int = 2200
 ): Modifier {
@@ -558,7 +557,6 @@ fun ModernCalendarCard(
                 }
             }
 
-            // Divider separating day headers from date cells when grid lines are enabled
             if (showGridLines) {
                 Divider(
                     color = Color(0xFFCBD5E1),
@@ -569,7 +567,6 @@ fun ModernCalendarCard(
 
             Column(modifier = Modifier.fillMaxWidth()) {
                 for (row in 0 until totalRows) {
-                    // Horizontal divider line between rows
                     if (showGridLines && row > 0) {
                         Divider(
                             color = Color(0xFFCBD5E1),
@@ -583,7 +580,6 @@ fun ModernCalendarCard(
                             .fillMaxWidth()
                             .then(
                                 if (showGridLines) {
-                                    // Draws vertical lines between the 7 date columns
                                     Modifier.drawBehind {
                                         val colWidth = size.width / 7f
                                         for (c in 1 until 7) {
@@ -657,11 +653,10 @@ fun ModernDayCell(
                 cornerRadius = 8.dp,
                 trackColor = Color(0xFFE0E7FF),
                 snakeColors = listOf(
-                    Color(0xFFEF476F), // Google Blue
-                    Color(0xFFFFD166), // Google Red
-                    Color(0xFF06D6A0), // Google Yellow
+                    Color(0xFFEF476F),
+                    Color(0xFFFFD166),
+                    Color(0xFF06D6A0),
                     Color(0xFF118AB2)
-                    
                 ),
                 durationMillis = 2200
             )
@@ -1066,6 +1061,9 @@ fun ModernSalaryInvoiceCard(report: SalaryReport) {
             if (report.schemeBonus > 0) {
                 InvoiceRow("Company Scheme Bonus", "+₹%.2f".format(report.schemeBonus), color = SuccessGreen)
             }
+
+            InvoiceRow("Dabba Allowance (Monthly)", "+₹%.2f".format(report.dabbaAllowance), color = SuccessGreen)
+            InvoiceRow("Net Dabba Payable (After Missed Days)", "₹%.2f".format(report.netDabbaEarned), isSub = true)
 
             Spacer(modifier = Modifier.height(6.dp))
             Divider(color = Color(0xFFF1F5F9), thickness = 1.dp)
