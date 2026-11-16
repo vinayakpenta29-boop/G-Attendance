@@ -218,6 +218,7 @@ class LocationTrackerReceiver : BroadcastReceiver() {
 
         val t1015 = LocalTime.of(10, 15, 59)
         val t1500 = LocalTime.of(15, 0)
+        val t1630 = LocalTime.of(16, 30)
         val t2100 = LocalTime.of(21, 0)
 
         if (isInside) {
@@ -234,10 +235,12 @@ class LocationTrackerReceiver : BroadcastReceiver() {
                     .commit()
             }
 
-            if (now.isBefore(LocalTime.of(15, 15))) {
+            // First shift presence (before 2:45 PM)
+            if (now.isBefore(LocalTime.of(14, 45))) {
                 trackerPrefs.edit().putBoolean("${today}_h1", true).commit()
             }
-            if (now.isAfter(t1500) && now.isBefore(LocalTime.of(21, 35))) {
+            // Second shift presence (only counted if still at workplace at or after 4:30 PM)
+            if (!now.isBefore(t1630) && now.isBefore(LocalTime.of(21, 35))) {
                 trackerPrefs.edit().putBoolean("${today}_h2", true).commit()
             }
         }
@@ -270,7 +273,7 @@ class LocationTrackerReceiver : BroadcastReceiver() {
             trackerPrefs.getString("${today}_arrival_status", "")
         }
 
-        val hasCompletedSecondHalf = wasInSecondHalf || (isInside && !now.isBefore(t1500))
+        val hasCompletedSecondHalf = wasInSecondHalf || (isInside && !now.isBefore(t1630))
 
         var newWorkStatus: AttendanceStatus = existingDay.safeWorkStatus
         var newDabbaStatus: DabbaStatus = existingDay.safeDabbaStatus
