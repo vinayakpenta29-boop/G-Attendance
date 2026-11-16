@@ -33,17 +33,12 @@ object ArrivalPunchHelper {
         }
     }
 
-    /**
-     * Atomically records the exact workplace arrival timestamp if not already logged today.
-     * Uses the actual GPS fix / geofence trigger timestamp rather than app-open time.
-     */
     fun recordExactArrivalIfNeeded(context: Context, triggerEpochMillis: Long): Boolean {
         synchronized(lock) {
             val zone = ZoneId.systemDefault()
             val triggerDateTime = Instant.ofEpochMilli(triggerEpochMillis).atZone(zone).toLocalDateTime()
             val nowDateTime = LocalDateTime.now(zone)
 
-            // Use actual GPS fix timestamp if it is from today and within 10 minutes of system clock
             val effectiveDateTime = if (
                 triggerDateTime.toLocalDate() == nowDateTime.toLocalDate() &&
                 !triggerDateTime.isAfter(nowDateTime.plusMinutes(1)) &&
@@ -93,10 +88,10 @@ object ArrivalPunchHelper {
                 prefEditor.putString("${today}_dabba", "L")
             }
 
-            if (arrivalTimeObj.isBefore(LocalTime.of(15, 15))) {
+            if (arrivalTimeObj.isBefore(LocalTime.of(14, 45))) {
                 prefEditor.putBoolean("${today}_h1", true)
             }
-            if (arrivalTimeObj.isAfter(LocalTime.of(15, 0)) && arrivalTimeObj.isBefore(LocalTime.of(21, 35))) {
+            if (!arrivalTimeObj.isBefore(LocalTime.of(16, 30)) && arrivalTimeObj.isBefore(LocalTime.of(21, 35))) {
                 prefEditor.putBoolean("${today}_h2", true)
             }
             prefEditor.commit()
