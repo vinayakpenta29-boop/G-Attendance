@@ -37,7 +37,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -147,7 +149,8 @@ private fun formatCompactRupee(amount: Double): String {
 @Composable
 fun DayWiseSalesChart(
     currentMonth: YearMonth,
-    records: List<DayAttendance>
+    records: List<DayAttendance>,
+    isLineChart: Boolean = false
 ) {
     val activeSalesDays = remember(records) { records.filter { it.salesAmount > 0.0 } }
     val maxSales = remember(records) { (records.maxOfOrNull { it.salesAmount } ?: 0.0).coerceAtLeast(1.0) }
@@ -253,7 +256,7 @@ fun DayWiseSalesChart(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Bar Chart Area with Y-Axis Labels
+        // Graph Area with Y-Axis Labels
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -273,7 +276,7 @@ fun DayWiseSalesChart(
                 Text("₹0", fontSize = 8.5.sp, color = TextSecondary, fontWeight = FontWeight.Medium)
             }
 
-            // Interactive Bar Graph Canvas
+            // Interactive Bar / Line Graph Canvas
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -313,45 +316,141 @@ fun DayWiseSalesChart(
                     drawLine(gridColor, Offset(0f, h / 2f), Offset(w, h / 2f), strokeWidth = 1.dp.toPx(), pathEffect = dashEffect)
                     drawLine(Color(0xFFCBD5E1), Offset(0f, h), Offset(w, h), strokeWidth = 1.2.dp.toPx())
 
-                    // Daily Bars
                     val slotWidth = w / count.toFloat()
-                    val barWidth = (slotWidth * 0.64f).coerceAtLeast(3f)
-                    val cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
 
-                    records.forEachIndexed { index, dayRecord ->
-                        val amount = dayRecord.salesAmount
-                        val isSelected = dayRecord.dayOfMonth == selectedDayNum
-                        val left = index * slotWidth + (slotWidth - barWidth) / 2f
+                    if (isLineChart) {
+                        // --- LINE CHART MODE ---
+                        val points = records.mapIndexed { index, dayRecord ->
+                            val ratio = (dayRecord.salesAmount / maxSales).toFloat().coerceIn(0f, 1f)
+                            val cx = index * slotWidth + slotWidth / 2f
+                            val cy = h * (1f - ratio)
+                            Offset(cx, cy)
+                        }
 
-                        if (amount > 0.0) {
-                            val ratio = (amount / maxSales).toFloat().coerceIn(0.03f, 1f)
-                            val barHeight = h * ratio
-                            val top = h - barHeight
+                        if (points.isNotEmpty()) {
+                            // Shaded area fill beneath the line
+                            val areaPath = Path().apply {
+                                moveTo(points.first().x, h)
+                                points.forEach { pt -> lineTo(pt.x, pt.y) }
+                                lineTo(points.last().x, h)
+                                close()
+                            }
+                            drawPath(
+                                path = areaPath,
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(
+                                        BrandPrimary.copy(alpha = 0.24f),
+                                        BrandPrimary.copy(alpha = 0.02f)
+                                    ),
+                                    startY = 0f,
+                                    endY = h
+                                )
+                            )
 
-                            val barBrush = if (isSelected) {
-                                Brush.verticalGradient(
-                                    listOf(Color(0xFF059669), Color(0xFF10B981))
+                            // Main trend line
+                            val linePath = Path().apply {
+                                moveTo(points.first().x, points.first().y)
+                                for (i in 1 until points.size) {
+                                    lineTo(points[i].x, points[i].y)
+                                }
+                            }
+                            drawPath(
+                                path = linePath,
+                                color = BrandPrimary,
+                                style = Stroke(
+                                    width = 2.4.dp.toPx(),
+                                    cap = StrokeCap.Round,
+                                    join = StrokeJoin.Round
+                                )
+                            )
+
+                            // Vertical guide line & data points
+                            records.forEachIndexed { index, dayRecord ->
+                                val pt = points[index]
+                                val isSelected = dayRecord.dayOfMonth == selectedDayNum
+
+                                if (isSelected) {
+                                    drawLine(
+                                        color = Color(0xFF10B981).copy(alpha = 0.55f),
+                                        start = Offset(pt.x, 0f),
+                                        end = Offset(pt.x, h),
+                                        strokeWidth = 1.2.dp.toPx(),
+                                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f), 0f)
+                                    )
+                                    drawCircle(
+                                        color = Color(0xFF10B981).copy(alpha = 0.25f),
+                                        radius = 7.5.dp.toPx(),
+                                        center = pt
+                                    )
+                                    drawCircle(
+                                        color = Color.White,
+                                        radius = 4.8.dp.toPx(),
+                                        center = pt
+                                    )
+                                    drawCircle(
+                                        color = Color(0xFF059669),
+                                        radius = 3.4.dp.toPx(),
+                                        center = pt
+                                    )
+                                } else if (dayRecord.salesAmount > 0.0) {
+                                    drawCircle(
+                                        color = Color.White,
+                                        radius = 3.2.dp.toPx(),
+                                        center = pt
+                                    )
+                                    drawCircle(
+                                        color = BrandPrimary,
+                                        radius = 2.2.dp.toPx(),
+                                        center = pt
+                                    )
+                                } else {
+                                    drawCircle(
+                                        color = Color(0xFFCBD5E1),
+                                        radius = 1.5.dp.toPx(),
+                                        center = pt
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        // --- BAR CHART MODE ---
+                        val barWidth = (slotWidth * 0.64f).coerceAtLeast(3f)
+                        val cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
+
+                        records.forEachIndexed { index, dayRecord ->
+                            val amount = dayRecord.salesAmount
+                            val isSelected = dayRecord.dayOfMonth == selectedDayNum
+                            val left = index * slotWidth + (slotWidth - barWidth) / 2f
+
+                            if (amount > 0.0) {
+                                val ratio = (amount / maxSales).toFloat().coerceIn(0.03f, 1f)
+                                val barHeight = h * ratio
+                                val top = h - barHeight
+
+                                val barBrush = if (isSelected) {
+                                    Brush.verticalGradient(
+                                        listOf(Color(0xFF059669), Color(0xFF10B981))
+                                    )
+                                } else {
+                                    Brush.verticalGradient(
+                                        listOf(BrandPrimary, Color(0xFF818CF8))
+                                    )
+                                }
+
+                                drawRoundRect(
+                                    brush = barBrush,
+                                    topLeft = Offset(left, top),
+                                    size = Size(barWidth, barHeight),
+                                    cornerRadius = cornerRadius
                                 )
                             } else {
-                                Brush.verticalGradient(
-                                    listOf(BrandPrimary, Color(0xFF818CF8))
+                                drawRoundRect(
+                                    color = if (isSelected) Color(0xFF94A3B8) else Color(0xFFE2E8F0),
+                                    topLeft = Offset(left, h - 3.dp.toPx()),
+                                    size = Size(barWidth, 3.dp.toPx()),
+                                    cornerRadius = CornerRadius(1.5.dp.toPx(), 1.5.dp.toPx())
                                 )
                             }
-
-                            drawRoundRect(
-                                brush = barBrush,
-                                topLeft = Offset(left, top),
-                                size = Size(barWidth, barHeight),
-                                cornerRadius = cornerRadius
-                            )
-                        } else {
-                            // Subtle marker for 0-sale day
-                            drawRoundRect(
-                                color = if (isSelected) Color(0xFF94A3B8) else Color(0xFFE2E8F0),
-                                topLeft = Offset(left, h - 3.dp.toPx()),
-                                size = Size(barWidth, 3.dp.toPx()),
-                                cornerRadius = CornerRadius(1.5.dp.toPx(), 1.5.dp.toPx())
-                            )
                         }
                     }
 
@@ -407,7 +506,12 @@ fun DayWiseSalesChart(
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Dashed line = Daily Avg", fontSize = 9.sp, color = TextSecondary)
             }
-            Text("Tap or slide bar to inspect", fontSize = 9.sp, color = BrandPrimary, fontWeight = FontWeight.Medium)
+            Text(
+                text = if (isLineChart) "Tap or slide point to inspect" else "Tap or slide bar to inspect",
+                fontSize = 9.sp,
+                color = BrandPrimary,
+                fontWeight = FontWeight.Medium
+            )
         }
     }
 }
@@ -474,6 +578,7 @@ fun ModernSalesIncentiveCard(
 
     val grandTotalIncentive = incentiveAmount + effectiveSchemeAmount
     var showSalesList by remember { mutableStateOf(false) }
+    var showLineChart by remember { mutableStateOf(false) }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -526,17 +631,62 @@ fun ModernSalesIncentiveCard(
                                 color = TextSecondary
                             )
                         } else {
-                            Text(
-                                text = "Daily Sales Graph:",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (showLineChart) "Daily Sales Line Graph:" else "Daily Sales Graph:",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = if (showLineChart) Color(0xFFEEF2FF) else Color.White,
+                                    border = BorderStroke(1.dp, if (showLineChart) BrandPrimary else Color(0xFFCBD5E1)),
+                                    modifier = Modifier.clickable { showLineChart = !showLineChart }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = if (showLineChart) "Line Chart" else "Bar Chart",
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (showLineChart) BrandPrimary else TextSecondary
+                                        )
+                                        Box(
+                                            modifier = Modifier.height(26.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Switch(
+                                                checked = showLineChart,
+                                                onCheckedChange = { showLineChart = it },
+                                                modifier = Modifier.graphicsLayer(scaleX = 0.78f, scaleY = 0.78f),
+                                                colors = SwitchDefaults.colors(
+                                                    checkedThumbColor = Color.White,
+                                                    checkedTrackColor = BrandPrimary,
+                                                    uncheckedThumbColor = Color.White,
+                                                    uncheckedTrackColor = Color(0xFFCBD5E1),
+                                                    uncheckedBorderColor = Color.Transparent
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
                             Spacer(modifier = Modifier.height(8.dp))
 
                             DayWiseSalesChart(
                                 currentMonth = currentMonth,
-                                records = records
+                                records = records,
+                                isLineChart = showLineChart
                             )
 
                             Spacer(modifier = Modifier.height(10.dp))
