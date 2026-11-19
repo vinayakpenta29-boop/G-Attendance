@@ -7,9 +7,12 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -27,6 +30,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -34,6 +38,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -127,6 +132,282 @@ fun Modifier.snakeRunningBorder(
                     )
                 )
             }
+        }
+    }
+}
+
+private fun formatCompactRupee(amount: Double): String {
+    return when {
+        amount >= 100000.0 -> "₹%.1fL".format(amount / 100000.0)
+        amount >= 1000.0 -> "₹%.0fk".format(amount / 1000.0)
+        else -> "₹%.0f".format(amount)
+    }
+}
+
+@Composable
+fun DayWiseSalesChart(
+    currentMonth: YearMonth,
+    records: List<DayAttendance>
+) {
+    val activeSalesDays = remember(records) { records.filter { it.salesAmount > 0.0 } }
+    val maxSales = remember(records) { (records.maxOfOrNull { it.salesAmount } ?: 0.0).coerceAtLeast(1.0) }
+    val avgActiveSales = remember(activeSalesDays) {
+        if (activeSalesDays.isNotEmpty()) activeSalesDays.sumOf { it.salesAmount } / activeSalesDays.size else 0.0
+    }
+    val peakRecord = remember(activeSalesDays) { activeSalesDays.maxByOrNull { it.salesAmount } }
+
+    var selectedDayNum by remember(currentMonth, activeSalesDays.size) {
+        mutableStateOf(peakRecord?.dayOfMonth ?: 1)
+    }
+
+    val selectedRecord = records.firstOrNull { it.dayOfMonth == selectedDayNum }
+    val selectedDayName = remember(currentMonth, selectedDayNum) {
+        try {
+            currentMonth.atDay(selectedDayNum).dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Peak & Average Summary Pills
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Surface(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(8.dp),
+                color = Color(0xFFECFDF5),
+                border = BorderStroke(1.dp, Color(0xFFA7F3D0))
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)) {
+                    Text(
+                        text = "PEAK SALE${if (peakRecord != null) " (DAY ${peakRecord.dayOfMonth})" else ""}",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF065F46)
+                    )
+                    Text(
+                        text = "₹%.0f".format(peakRecord?.salesAmount ?: 0.0),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = SuccessGreen
+                    )
+                }
+            }
+
+            Surface(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(8.dp),
+                color = Color(0xFFEEF2FF),
+                border = BorderStroke(1.dp, Color(0xFFC7D2FE))
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)) {
+                    Text(
+                        text = "AVG / ACTIVE DAY (${activeSalesDays.size}d)",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF3730A3)
+                    )
+                    Text(
+                        text = "₹%.0f".format(avgActiveSales),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = BrandPrimary
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Interactive Selected Day Inspector Banner
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            color = Color.White,
+            border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Day $selectedDayNum ($selectedDayName)",
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "₹%.2f".format(selectedRecord?.salesAmount ?: 0.0),
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = if ((selectedRecord?.salesAmount ?: 0.0) > 0.0) SuccessGreen else TextSecondary
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Bar Chart Area with Y-Axis Labels
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(135.dp),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            // Y-Axis Scale Labels
+            Column(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .padding(end = 6.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+                horizontalAlignment = Alignment.End
+            ) {
+                Text(formatCompactRupee(maxSales), fontSize = 8.5.sp, color = TextSecondary, fontWeight = FontWeight.Medium)
+                Text(formatCompactRupee(maxSales / 2.0), fontSize = 8.5.sp, color = TextSecondary, fontWeight = FontWeight.Medium)
+                Text("₹0", fontSize = 8.5.sp, color = TextSecondary, fontWeight = FontWeight.Medium)
+            }
+
+            // Interactive Bar Graph Canvas
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .pointerInput(records) {
+                        detectTapGestures { offset ->
+                            if (size.width > 0 && records.isNotEmpty()) {
+                                val idx = ((offset.x / size.width) * records.size)
+                                    .toInt()
+                                    .coerceIn(0, records.size - 1)
+                                selectedDayNum = records[idx].dayOfMonth
+                            }
+                        }
+                    }
+                    .pointerInput(records) {
+                        detectHorizontalDragGestures { change, _ ->
+                            if (size.width > 0 && records.isNotEmpty()) {
+                                val idx = ((change.position.x / size.width) * records.size)
+                                    .toInt()
+                                    .coerceIn(0, records.size - 1)
+                                selectedDayNum = records[idx].dayOfMonth
+                            }
+                        }
+                    }
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val w = size.width
+                    val h = size.height
+                    val count = records.size
+                    if (count == 0) return@Canvas
+
+                    val gridColor = Color(0xFFE2E8F0)
+                    val dashEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
+
+                    // Horizontal Gridlines (Top, Middle, Baseline)
+                    drawLine(gridColor, Offset(0f, 0f), Offset(w, 0f), strokeWidth = 1.dp.toPx(), pathEffect = dashEffect)
+                    drawLine(gridColor, Offset(0f, h / 2f), Offset(w, h / 2f), strokeWidth = 1.dp.toPx(), pathEffect = dashEffect)
+                    drawLine(Color(0xFFCBD5E1), Offset(0f, h), Offset(w, h), strokeWidth = 1.2.dp.toPx())
+
+                    // Daily Bars
+                    val slotWidth = w / count.toFloat()
+                    val barWidth = (slotWidth * 0.64f).coerceAtLeast(3f)
+                    val cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
+
+                    records.forEachIndexed { index, dayRecord ->
+                        val amount = dayRecord.salesAmount
+                        val isSelected = dayRecord.dayOfMonth == selectedDayNum
+                        val left = index * slotWidth + (slotWidth - barWidth) / 2f
+
+                        if (amount > 0.0) {
+                            val ratio = (amount / maxSales).toFloat().coerceIn(0.03f, 1f)
+                            val barHeight = h * ratio
+                            val top = h - barHeight
+
+                            val barBrush = if (isSelected) {
+                                Brush.verticalGradient(
+                                    listOf(Color(0xFF059669), Color(0xFF10B981))
+                                )
+                            } else {
+                                Brush.verticalGradient(
+                                    listOf(BrandPrimary, Color(0xFF818CF8))
+                                )
+                            }
+
+                            drawRoundRect(
+                                brush = barBrush,
+                                topLeft = Offset(left, top),
+                                size = Size(barWidth, barHeight),
+                                cornerRadius = cornerRadius
+                            )
+                        } else {
+                            // Subtle marker for 0-sale day
+                            drawRoundRect(
+                                color = if (isSelected) Color(0xFF94A3B8) else Color(0xFFE2E8F0),
+                                topLeft = Offset(left, h - 3.dp.toPx()),
+                                size = Size(barWidth, 3.dp.toPx()),
+                                cornerRadius = CornerRadius(1.5.dp.toPx(), 1.5.dp.toPx())
+                            )
+                        }
+                    }
+
+                    // Average Sales Reference Line
+                    if (avgActiveSales > 0.0) {
+                        val avgRatio = (avgActiveSales / maxSales).toFloat().coerceIn(0f, 1f)
+                        val avgY = h * (1f - avgRatio)
+                        drawLine(
+                            color = WarningAmber,
+                            start = Offset(0f, avgY),
+                            end = Offset(w, avgY),
+                            strokeWidth = 1.5.dp.toPx(),
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f), 0f)
+                        )
+                    }
+                }
+            }
+        }
+
+        // X-Axis Day Markers
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 34.dp, top = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            val tickDays = listOf(1, 5, 10, 15, 20, 25, records.size)
+            tickDays.forEach { d ->
+                Text(
+                    text = "$d",
+                    fontSize = 8.5.sp,
+                    color = if (d == selectedDayNum) BrandPrimary else TextSecondary,
+                    fontWeight = if (d == selectedDayNum) FontWeight.Bold else FontWeight.Normal
+                )
+            }
+        }
+
+        // Legend Hint
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .width(12.dp)
+                        .height(2.dp)
+                        .background(WarningAmber)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Dashed line = Daily Avg", fontSize = 9.sp, color = TextSecondary)
+            }
+            Text("Tap or slide bar to inspect", fontSize = 9.sp, color = BrandPrimary, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -231,41 +512,70 @@ fun ModernSalesIncentiveCard(
             if (showSalesList) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(12.dp),
                     color = Color(0xFFF8FAFC),
                     border = BorderStroke(1.dp, CardBorder),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .padding(10.dp)
-                            .heightIn(max = 180.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        Text("Day-Wise Sales Records:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Spacer(modifier = Modifier.height(6.dp))
+                    Column(modifier = Modifier.padding(12.dp)) {
                         val salesDays = records.filter { it.salesAmount > 0 }
                         if (salesDays.isEmpty()) {
-                            Text("No sales logged for this month yet. Tap any date to add sales.", fontSize = 11.sp, color = TextSecondary)
+                            Text(
+                                text = "No sales logged for this month yet. Tap any date to add sales.",
+                                fontSize = 11.sp,
+                                color = TextSecondary
+                            )
                         } else {
-                            salesDays.forEach { d ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 3.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = "Day ${d.dayOfMonth} (${currentMonth.atDay(d.dayOfMonth).dayOfWeek.name.take(3)})",
-                                        fontSize = 11.5.sp,
-                                        color = TextSecondary
-                                    )
-                                    Text(
-                                        text = "₹%.2f".format(d.salesAmount),
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
-                                    )
+                            Text(
+                                text = "Daily Sales Graph:",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            DayWiseSalesChart(
+                                currentMonth = currentMonth,
+                                records = records
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Divider(color = CardBorder, thickness = 1.dp)
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = "Day-Wise Sales Records:",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 150.dp)
+                                    .verticalScroll(rememberScrollState())
+                            ) {
+                                salesDays.forEach { d ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 3.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "Day ${d.dayOfMonth} (${currentMonth.atDay(d.dayOfMonth).dayOfWeek.name.take(3)})",
+                                            fontSize = 11.5.sp,
+                                            color = TextSecondary
+                                        )
+                                        Text(
+                                            text = "₹%.2f".format(d.salesAmount),
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextPrimary
+                                        )
+                                    }
                                 }
                             }
                         }
